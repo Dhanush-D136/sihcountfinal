@@ -1,15 +1,9 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "server.py",
-      "use": "@vercel/python"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "server.py"
-    }
+  "rewrites": [
+    { "source": "/admin", "destination": "/admin.html" },
+    { "source": "/admin/login", "destination": "/admin.html" },
+    { "source": "/admin/dashboard", "destination": "/admin.html" },
+    { "source": "/sih-admin", "destination": "/admin.html" }
   ]
 }

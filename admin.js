@@ -75,6 +75,15 @@
   // Announcement History Table
   const annHistoryTableBody = document.getElementById('annHistoryTableBody');
 
+  // Audit Log Table & Refresh
+  const auditLogTableBody = document.getElementById('auditLogTableBody');
+  const refreshAuditBtn = document.getElementById('refreshAuditBtn');
+
+  // Reset Confirmation Modal Elements
+  const resetConfirmModal = document.getElementById('resetConfirmModal');
+  const cancelResetBtn = document.getElementById('cancelResetBtn');
+  const confirmResetBtn = document.getElementById('confirmResetBtn');
+
   // Preview Modal Elements
   const adminAnnPreviewModal = document.getElementById('adminAnnPreviewModal');
   const adminPreviewGlassCard = document.getElementById('adminPreviewGlassCard');
@@ -86,11 +95,17 @@
   const adminPreviewTimerText = document.getElementById('adminPreviewTimerText');
   const closeAdminPreviewBtn = document.getElementById('closeAdminPreviewBtn');
 
+  // API Base URL Configuration for Render Backend
+  const DEFAULT_RENDER_URL = 'https://sihcountdownveltech.onrender.com';
+  const API_BASE_URL = window.API_BASE_URL ||
+    (window.location.hostname.includes('vercel.app') ? DEFAULT_RENDER_URL : '');
+
   // Local State
   let availableMusicList = [];
   let currentSelectedDurationType = '60'; // default 60s (1 min)
   let previewAudioInstance = null;
   let previewTimerInterval = null;
+  let pollInterval = null;
 
   // 1. Password Visibility Toggle
   togglePasswordBtn.addEventListener('click', () => {
@@ -129,7 +144,7 @@
   // 3. Fetch Available Notification Music from Server
   async function fetchMusicList() {
     try {
-      const res = await fetch('/api/music/list');
+      const res = await fetch(API_BASE_URL + '/api/music/list', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         availableMusicList = data.music || [];
@@ -217,7 +232,7 @@
     stopAudioPreview();
     if (!filename) return;
 
-    const audioUrl = `/Music/${encodeURIComponent(filename)}`;
+    const audioUrl = (API_BASE_URL ? API_BASE_URL : '') + `/Music/${encodeURIComponent(filename)}`;
     previewAudioInstance = new Audio(audioUrl);
     previewAudioInstance.loop = annLoopMusicCheckbox.checked;
 
@@ -368,9 +383,10 @@
       btn.addEventListener('click', async () => {
         const id = btn.dataset.id;
         try {
-          await fetch('/api/admin/announcements/delete', {
+          await fetch(API_BASE_URL + '/api/admin/announcements/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ id })
           });
           fetchAdminStatus();
@@ -444,7 +460,7 @@
   // 10. Fetch Authoritative Admin Status & Audit Logs
   async function fetchAdminStatus() {
     try {
-      const res = await fetch('/api/admin/status');
+      const res = await fetch(API_BASE_URL + '/api/admin/status', { credentials: 'include' });
       if (res.status === 401) {
         showLoginView();
         return;
@@ -488,9 +504,10 @@
     const password = adminPasswordInput.value.trim();
 
     try {
-      const res = await fetch('/api/admin/login', {
+      const res = await fetch(API_BASE_URL + '/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ username, password })
       });
 
@@ -516,7 +533,7 @@
   adminLogoutBtn.addEventListener('click', async () => {
     stopAudioPreview();
     try {
-      await fetch('/api/admin/logout', { method: 'POST' });
+      await fetch(API_BASE_URL + '/api/admin/logout', { method: 'POST', credentials: 'include' });
     } catch (e) {}
     showLoginView();
   });
@@ -524,41 +541,47 @@
   // 13. Event Actions: Start, Pause, Resume
   adminStartBtn.addEventListener('click', async () => {
     try {
-      const res = await fetch('/api/admin/event/start', { method: 'POST' });
+      const res = await fetch(API_BASE_URL + '/api/admin/event/start', { method: 'POST', credentials: 'include' });
       if (res.ok) fetchAdminStatus();
     } catch (e) {}
   });
 
   adminPauseBtn.addEventListener('click', async () => {
     try {
-      const res = await fetch('/api/admin/event/pause', { method: 'POST' });
+      const res = await fetch(API_BASE_URL + '/api/admin/event/pause', { method: 'POST', credentials: 'include' });
       if (res.ok) fetchAdminStatus();
     } catch (e) {}
   });
 
   adminResumeBtn.addEventListener('click', async () => {
     try {
-      const res = await fetch('/api/admin/event/resume', { method: 'POST' });
+      const res = await fetch(API_BASE_URL + '/api/admin/event/resume', { method: 'POST', credentials: 'include' });
       if (res.ok) fetchAdminStatus();
     } catch (e) {}
   });
 
   // 14. Protected Reset Confirmation Workflow
-  adminResetBtn.addEventListener('click', () => {
-    resetConfirmModal.classList.remove('hidden');
-  });
+  if (adminResetBtn) {
+    adminResetBtn.addEventListener('click', () => {
+      if (resetConfirmModal) resetConfirmModal.classList.remove('hidden');
+    });
+  }
 
-  cancelResetBtn.addEventListener('click', () => {
-    resetConfirmModal.classList.add('hidden');
-  });
+  if (cancelResetBtn) {
+    cancelResetBtn.addEventListener('click', () => {
+      if (resetConfirmModal) resetConfirmModal.classList.add('hidden');
+    });
+  }
 
-  confirmResetBtn.addEventListener('click', async () => {
-    resetConfirmModal.classList.add('hidden');
-    try {
-      const res = await fetch('/api/admin/event/reset', { method: 'POST' });
-      if (res.ok) fetchAdminStatus();
-    } catch (e) {}
-  });
+  if (confirmResetBtn) {
+    confirmResetBtn.addEventListener('click', async () => {
+      if (resetConfirmModal) resetConfirmModal.classList.add('hidden');
+      try {
+        const res = await fetch(API_BASE_URL + '/api/admin/event/reset', { method: 'POST', credentials: 'include' });
+        if (res.ok) fetchAdminStatus();
+      } catch (e) {}
+    });
+  }
 
   // 15. Edit Timer Form & Presets
   presetBtns.forEach(btn => {
@@ -576,9 +599,10 @@
     const seconds = parseInt(editSeconds.value || 0, 10);
 
     try {
-      const res = await fetch('/api/admin/event/edit_timer', {
+      const res = await fetch(API_BASE_URL + '/api/admin/event/edit_timer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ hours, minutes, seconds })
       });
       if (res.ok) fetchAdminStatus();
@@ -625,9 +649,10 @@
       triggerNowBtn.disabled = true;
       triggerNowBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> BROADCASTING...';
 
-      const res = await fetch('/api/admin/announcements/create', {
+      const res = await fetch(API_BASE_URL + '/api/admin/announcements/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           heading,
           time_label,
@@ -656,7 +681,9 @@
     }
   });
 
-  refreshAuditBtn.addEventListener('click', fetchAdminStatus);
+  if (refreshAuditBtn) {
+    refreshAuditBtn.addEventListener('click', fetchAdminStatus);
+  }
 
   // Initialize Admin State Check & Music Fetching
   document.addEventListener('DOMContentLoaded', () => {

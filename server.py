@@ -12,9 +12,13 @@ import secrets
 import threading
 from functools import wraps
 from flask import Flask, request, jsonify, send_from_directory, make_response, Response
+from flask_cors import CORS
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+
+# Configure CORS for Vercel Frontend and Local Dev origins
+CORS(app, supports_credentials=True, origins=r"https://.*\.vercel\.app|http://localhost:.*|http://127\.0\.0\.1:.*")
 
 # Set SQLite Database path dynamically (uses /tmp on read-only serverless platforms like Vercel)
 if os.environ.get('VERCEL') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME') or not os.access('.', os.W_OK):
@@ -251,6 +255,11 @@ if not os.environ.get('VERCEL'):
 # PUBLIC API ENDPOINTS
 # ==========================================================================
 
+# Health Check Endpoint
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'ok', 'server_time': round(time.time(), 3)}), 200
+
 @app.route('/api/event/status', methods=['GET'])
 def get_public_event_status():
     state = calculate_event_state()
@@ -289,10 +298,15 @@ def reject_public_writes():
 # Real-Time SSE Stream for Instant Push Updates
 @app.route('/api/events/stream')
 def sse_event_stream():
+    state = calculate_event_state()
+    if os.environ.get('VERCEL'):
+        # On serverless platforms like Vercel, return current state without infinite while-loop timeout
+        return Response(f"data: {json.dumps(state)}\n\n", mimetype='text/event-stream')
+
     def generate():
         while True:
-            state = calculate_event_state()
-            yield f"data: {json.dumps(state)}\n\n"
+            st = calculate_event_state()
+            yield f"data: {json.dumps(st)}\n\n"
             time.sleep(1.5)
     return Response(generate(), mimetype='text/event-stream')
 
@@ -324,8 +338,16 @@ def admin_login():
 
     log_audit('LOGIN_SUCCESS', username, 'Admin session established', ip_addr)
 
+    is_https = request.is_secure or request.headers.get('X-Forwarded-Proto') == 'https'
     response = make_response(jsonify({'success': True, 'username': DEFAULT_ADMIN_USER}))
-    response.set_cookie('sih_admin_session', session_id, httponly=True, samesite='Lax', max_age=12*3600)
+    response.set_cookie(
+        'sih_admin_session',
+        session_id,
+        httponly=True,
+        samesite='None' if is_https else 'Lax',
+        secure=is_https,
+        max_age=12*3600
+    )
     return response, 200
 
 @app.route('/api/admin/logout', methods=['POST'])

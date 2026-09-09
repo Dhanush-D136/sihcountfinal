@@ -45,6 +45,11 @@
   const resetTimerBtn = document.getElementById('resetTimerBtn');
   const relaunchBtn = document.getElementById('relaunchBtn');
 
+  // API Base URL Configuration for Render Backend
+  const DEFAULT_RENDER_URL = 'https://sihcountdownveltech.onrender.com';
+  const API_BASE_URL = window.API_BASE_URL ||
+    (window.location.hostname.includes('vercel.app') ? DEFAULT_RENDER_URL : '');
+
   // State Trackers
   let serverEventState = null;
   let serverClockOffset = 0; // serverTimeInSeconds - clientLocalTimeInSeconds
@@ -53,6 +58,7 @@
   let currentHours = null;
   let currentMinutes = null;
   let currentSeconds = null;
+  let connectionFailed = false;
 
   // 1. Sound Toggle Controller
   function updateSoundUI() {
@@ -347,29 +353,51 @@
     handleAnnouncementOverlay(state.active_announcement);
   }
 
+  function handleConnectionStatus(connected) {
+    if (!connected) {
+      connectionFailed = true;
+      if (headerStatusText && (!serverEventState || serverEventState.status === 'NOT_STARTED')) {
+        headerStatusText.textContent = 'CONNECTING TO BACKEND...';
+      }
+    } else {
+      connectionFailed = false;
+    }
+  }
+
   async function fetchServerState() {
     try {
-      const res = await fetch('/api/event/status');
+      const res = await fetch(`${API_BASE_URL}/api/event/status`, { credentials: 'include' });
       if (res.ok) {
         const state = await res.json();
+        handleConnectionStatus(true);
         renderState(state);
+      } else {
+        handleConnectionStatus(false);
       }
-    } catch (e) {}
+    } catch (e) {
+      handleConnectionStatus(false);
+    }
   }
 
   function initSSE() {
     try {
-      const evtSource = new EventSource('/api/events/stream');
+      const streamUrl = `${API_BASE_URL}/api/events/stream`;
+      const evtSource = new EventSource(streamUrl, { withCredentials: true });
       evtSource.onmessage = function (event) {
-        const state = JSON.parse(event.data);
-        renderState(state);
+        try {
+          const state = JSON.parse(event.data);
+          handleConnectionStatus(true);
+          renderState(state);
+        } catch (e) {}
       };
       evtSource.onerror = function () {
         evtSource.close();
-        setInterval(fetchServerState, 1500);
+        handleConnectionStatus(false);
+        setTimeout(initSSE, 3000);
       };
     } catch (e) {
-      setInterval(fetchServerState, 1500);
+      handleConnectionStatus(false);
+      setInterval(fetchServerState, 2000);
     }
   }
 
@@ -382,10 +410,8 @@
     startBtn.style.pointerEvents = 'none';
     startBtn.style.opacity = '0.5';
 
-    // Initiate official server-side event start timestamp via public_start API
-    try {
-      await fetch('/api/event/public_start', { method: 'POST' });
-    } catch (e) {}
+    // Parallel fetch call to Render backend
+    fetch(`${API_BASE_URL}/api/event/public_start`, { method: 'POST', credentials: 'include' }).catch(() => {});
 
     // Trigger visual launch ceremony (Poppers, Confetti, Ambient Glow) over dark background
     window.FXEngine.triggerLaunchCeremony(() => {
