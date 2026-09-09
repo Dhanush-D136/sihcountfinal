@@ -1,0 +1,7 @@
+sih_database.db
+*.db-journal
+*.sqlite3
+Dockerfile
+Procfile
+render.yaml
+.env.example
