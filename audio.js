@@ -40,11 +40,19 @@
     return isMuted;
   }
 
+  function unlockAudioContext() {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  }
+
+  // Preload audio buffer immediately
   function preloadLaunchAudio() {
     try {
-      fetch('hackathon-launch.wav')
+      fetch('/hackathon-launch.wav')
         .then(res => {
-          if (!res.ok) return fetch('public/audio/hackathon-launch.wav');
+          if (!res.ok) return fetch('hackathon-launch.wav');
           return res;
         })
         .then(res => res.arrayBuffer())
@@ -59,6 +67,10 @@
         .catch(() => {});
     } catch (e) {}
   }
+
+  // Attach global unlock listeners
+  window.addEventListener('pointerdown', unlockAudioContext, { once: true });
+  window.addEventListener('keydown', unlockAudioContext, { once: true });
 
   function playClickSound() {
     if (isMuted) return;

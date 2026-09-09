@@ -50,7 +50,8 @@
   const API_BASE_URL = window.API_BASE_URL ||
     (window.location.hostname.includes('vercel.app') ? DEFAULT_RENDER_URL : '');
 
-  // State Trackers
+  // State Trackers & State Machine
+  let appState = 'NOT_STARTED'; // NOT_STARTED, LAUNCHING, RUNNING, PAUSED, COMPLETED
   let serverEventState = null;
   let serverClockOffset = 0; // serverTimeInSeconds - clientLocalTimeInSeconds
   let lastDisplayedTotalSeconds = null;
@@ -59,6 +60,15 @@
   let currentMinutes = null;
   let currentSeconds = null;
   let connectionFailed = false;
+  let activeEvtSource = null;
+
+  // Diagnostic Timing Flag
+  const DEBUG_PERF = false;
+  function logPerf(label, startTime) {
+    if (DEBUG_PERF) {
+      console.log(`[PERF DIAGNOSTIC] ${label}: ${(performance.now() - startTime).toFixed(2)}ms`);
+    }
+  }
 
   // 1. Sound Toggle Controller
   function updateSoundUI() {
@@ -123,8 +133,6 @@
     const now = new Date();
 
     const day = String(now.getDate()).padStart(2, '0');
-    const months = ['Sep', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    // getMonth() is 0-indexed
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const month = monthNames[now.getMonth()];
     const year = now.getFullYear();
@@ -180,22 +188,22 @@
 
   // 7. Authoritative High-Precision Timestamp Calculation Loop
   function tickTimerLoop() {
-    if (!serverEventState) return;
+    if (!serverEventState && appState !== 'LAUNCHING') return;
 
-    const status = serverEventState.status;
+    const status = serverEventState ? serverEventState.status : (appState === 'LAUNCHING' ? 'RUNNING' : 'NOT_STARTED');
     const nowClientSeconds = Date.now() / 1000;
     const nowServerSeconds = nowClientSeconds + serverClockOffset;
 
     let remainingSecondsFloat = 0;
-    const duration = serverEventState.duration_seconds || 86400;
+    const duration = serverEventState ? (serverEventState.duration_seconds || 86400) : 86400;
 
-    if (status === 'RUNNING' && serverEventState.target_timestamp) {
+    if (status === 'RUNNING' && serverEventState && serverEventState.target_timestamp) {
       remainingSecondsFloat = Math.max(0, serverEventState.target_timestamp - nowServerSeconds);
-    } else if (status === 'PAUSED') {
+    } else if (status === 'PAUSED' && serverEventState) {
       remainingSecondsFloat = serverEventState.remaining_seconds || 0;
     } else if (status === 'COMPLETED') {
       remainingSecondsFloat = 0;
-    } else { // NOT_STARTED
+    } else { // NOT_STARTED or LAUNCHING optimistic fallback
       remainingSecondsFloat = duration;
     }
 
@@ -213,20 +221,23 @@
     }
 
     // Update Progress Bar
-    if (status === 'RUNNING' || status === 'PAUSED' || status === 'COMPLETED') {
+    if ((status === 'RUNNING' || status === 'PAUSED' || status === 'COMPLETED') && serverEventState) {
       const elapsedSeconds = Math.max(0, duration - remainingSecondsFloat);
       const progressPercent = Math.min(100, Math.max(0, (elapsedSeconds / duration) * 100));
       updateProgressBar(progressPercent, serverEventState.start_timestamp, serverEventState.target_timestamp);
     }
 
     // Handle Natural Completion
-    if (status === 'RUNNING' && remainingSecondsFloat <= 0) {
+    if (status === 'RUNNING' && serverEventState && remainingSecondsFloat <= 0) {
       serverEventState.status = 'COMPLETED';
       renderState(serverEventState);
     }
+
+    // Continuously update active announcement progress line on every tick
+    handleAnnouncementOverlay(serverEventState ? serverEventState.active_announcement : null);
   }
 
-  // 8. Handle Live Announcement Overlay Display
+  // 8. Handle Live Announcement Overlay Display (High precision continuous rendering)
   function handleAnnouncementOverlay(ann) {
     if (!ann) {
       if (lastAnnId !== null) {
@@ -257,8 +268,8 @@
     annHeading.textContent = ann.heading;
     annDetails.textContent = ann.details;
 
-    // Smooth transform scaling (Right to Left: 1.0 -> 0.0)
-    const progressRatio = Math.max(0, Math.min(1, 1 - (elapsedSeconds / duration)));
+    // Smooth transform scaling derived strictly from server timestamp (Right to Left: 1.0 -> 0.0)
+    const progressRatio = Math.max(0, Math.min(1, remainingSecondsFloat / duration));
     annProgressFill.style.transform = `scaleX(${progressRatio})`;
     
     if (ann.until_song_complete) {
@@ -304,6 +315,7 @@
   function renderState(state) {
     if (!state) return;
     serverEventState = state;
+    appState = state.status;
 
     // Calculate Client-Server Clock Offset
     if (state.server_time) {
@@ -350,13 +362,12 @@
 
     // Run tick loop immediately to refresh UI
     tickTimerLoop();
-    handleAnnouncementOverlay(state.active_announcement);
   }
 
   function handleConnectionStatus(connected) {
     if (!connected) {
       connectionFailed = true;
-      if (headerStatusText && (!serverEventState || serverEventState.status === 'NOT_STARTED')) {
+      if (headerStatusText && appState === 'NOT_STARTED') {
         headerStatusText.textContent = 'CONNECTING TO BACKEND...';
       }
     } else {
@@ -381,17 +392,24 @@
 
   function initSSE() {
     try {
+      if (activeEvtSource) {
+        activeEvtSource.close();
+        activeEvtSource = null;
+      }
       const streamUrl = `${API_BASE_URL}/api/events/stream`;
-      const evtSource = new EventSource(streamUrl, { withCredentials: true });
-      evtSource.onmessage = function (event) {
+      activeEvtSource = new EventSource(streamUrl, { withCredentials: true });
+      activeEvtSource.onmessage = function (event) {
         try {
           const state = JSON.parse(event.data);
           handleConnectionStatus(true);
           renderState(state);
         } catch (e) {}
       };
-      evtSource.onerror = function () {
-        evtSource.close();
+      activeEvtSource.onerror = function () {
+        if (activeEvtSource) {
+          activeEvtSource.close();
+          activeEvtSource = null;
+        }
         handleConnectionStatus(false);
         setTimeout(initSSE, 3000);
       };
@@ -401,22 +419,53 @@
     }
   }
 
-  // 10. Public START HACKATHON Button — NO PASSWORD REQUIRED FOR INITIAL START!
+  // 10. Public START HACKATHON Button — INSTANT VISUAL & SOUND RESPONSE (<100ms)
   async function initiatePublicLaunch() {
-    // Play inauguration sound & trigger particle/confetti visual ceremony immediately
-    window.AudioEngine.playLaunchCeremonySound();
+    if (appState !== 'NOT_STARTED') return;
 
-    // Disable start button to prevent double-clicks
+    const tStart = performance.now();
+    appState = 'LAUNCHING';
+
+    // 1. Play inauguration sound immediately
+    window.AudioEngine.playLaunchCeremonySound();
+    logPerf('Sound started', tStart);
+
+    // 2. Disable start button to prevent duplicate clicks
     startBtn.style.pointerEvents = 'none';
     startBtn.style.opacity = '0.5';
 
-    // Parallel fetch call to Render backend
-    fetch(`${API_BASE_URL}/api/event/public_start`, { method: 'POST', credentials: 'include' }).catch(() => {});
+    // 3. Trigger immediate visual transition (<100ms) over dark background
+    body.className = 'state-running';
+    headerStatusText.textContent = '24-HOUR HACKATHON ACTIVE';
+    prelaunchContainer.classList.add('hidden');
+    completionContainer.classList.add('hidden');
+    countdownContainer.classList.remove('hidden');
+    logPerf('UI state transition', tStart);
 
-    // Trigger visual launch ceremony (Poppers, Confetti, Ambient Glow) over dark background
+    // 4. Trigger visual launch ceremony (Poppers, Confetti, Sparks) immediately
     window.FXEngine.triggerLaunchCeremony(() => {
       fetchServerState();
     });
+    logPerf('FX ceremony triggered', tStart);
+
+    // 5. Asynchronously dispatch start request in parallel to server
+    try {
+      fetch(`${API_BASE_URL}/api/event/public_start`, { method: 'POST', credentials: 'include' })
+        .then(res => res.json())
+        .then(data => {
+          logPerf('API start response received', tStart);
+          if (data && data.event) {
+            renderState(data.event);
+          }
+        })
+        .catch(err => {
+          logPerf('API start error handled', tStart);
+          // Backend retry/poll fallback
+          fetchServerState();
+        });
+    } catch (e) {
+      fetchServerState();
+    }
   }
 
   // 11. Premium Reset Confirmation Modal Display (ADMIN ONLY AFTER START)
@@ -453,7 +502,7 @@
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
       if (e.code === 'Space') {
-        if (!prelaunchContainer.classList.contains('hidden')) {
+        if (!prelaunchContainer.classList.contains('hidden') || appState === 'NOT_STARTED') {
           e.preventDefault();
           initiatePublicLaunch();
         }

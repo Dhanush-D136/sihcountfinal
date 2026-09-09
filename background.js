@@ -157,7 +157,10 @@
     ctx.restore();
   }
 
+  let isPaused = false;
+
   function render() {
+    if (isPaused) return;
     ctx.clearRect(0, 0, width, height);
 
     // Draw ambient background elements
@@ -179,13 +182,35 @@
     animFrameId = requestAnimationFrame(render);
   }
 
+  function handleVisibilityChange() {
+    if (document.hidden) {
+      isPaused = true;
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+    } else {
+      if (isPaused) {
+        isPaused = false;
+        render();
+      }
+    }
+  }
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+
   window.addEventListener('resize', resize);
   resize();
   render();
 
   // Expose global controller
   window.BackgroundEngine = {
-    stop: () => cancelAnimationFrame(animFrameId),
-    start: () => render()
+    stop: () => {
+      isPaused = true;
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+    },
+    start: () => {
+      if (isPaused) {
+        isPaused = false;
+        render();
+      }
+    }
   };
 })();

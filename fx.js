@@ -262,6 +262,20 @@
     }
   }
 
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (animFrameId) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
+      isRunning = false;
+    } else {
+      if (particles.length > 0 || fireworks.length > 0) {
+        ensureAnimation();
+      }
+    }
+  });
+
   window.addEventListener('resize', resize);
   resize();
 

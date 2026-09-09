@@ -1205,17 +1205,23 @@ body.event-mode .digit-wrapper {
 
 .ann-progress-bar {
   width: 100%;
-  height: 6px;
+  height: 8px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
   overflow: hidden;
 }
 
 .ann-progress-fill {
+  width: 100%;
   height: 100%;
   border-radius: 9999px;
-  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-violet));
-  transition: width 1s linear;
+  background: linear-gradient(90deg, #00f2fe 0%, #3b82f6 50%, #7928ca 100%);
+  box-shadow: 0 0 12px rgba(0, 242, 254, 0.7);
+  transform-origin: left center;
+  will-change: transform;
+  transition: none;
 }
 
 .ann-timer-text {
@@ -1507,9 +1513,11 @@ body.event-mode .digit-wrapper {
 
 .ann-progress-bar {
   width: 100%;
-  height: 6px;
+  height: 8px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
   overflow: hidden;
 }
 
@@ -1517,9 +1525,10 @@ body.event-mode .digit-wrapper {
   width: 100%;
   height: 100%;
   border-radius: 9999px;
-  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
-  box-shadow: 0 0 12px var(--accent-cyan);
+  background: linear-gradient(90deg, #00f2fe 0%, #3b82f6 50%, #7928ca 100%);
+  box-shadow: 0 0 12px rgba(0, 242, 254, 0.7);
   transform-origin: left center;
+  will-change: transform;
   transition: none;
 }
 

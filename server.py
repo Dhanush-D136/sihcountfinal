@@ -299,16 +299,21 @@ def reject_public_writes():
 @app.route('/api/events/stream')
 def sse_event_stream():
     state = calculate_event_state()
+    headers = {
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+        'Connection': 'keep-alive'
+    }
     if os.environ.get('VERCEL'):
         # On serverless platforms like Vercel, return current state without infinite while-loop timeout
-        return Response(f"data: {json.dumps(state)}\n\n", mimetype='text/event-stream')
+        return Response(f"data: {json.dumps(state)}\n\n", mimetype='text/event-stream', headers=headers)
 
     def generate():
         while True:
             st = calculate_event_state()
             yield f"data: {json.dumps(st)}\n\n"
             time.sleep(1.5)
-    return Response(generate(), mimetype='text/event-stream')
+    return Response(generate(), mimetype='text/event-stream', headers=headers)
 
 # ==========================================================================
 # PROTECTED ADMIN AUTHENTICATION API ENDPOINTS
