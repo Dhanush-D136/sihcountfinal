@@ -255,6 +255,76 @@
     });
   }
 
+  let currentAnnouncementAudio = null;
+  let fadeInterval = null;
+
+  function playAnnouncementMusic(filename, loop = false, seekSeconds = 0, onEndedCallback = null) {
+    if (isMuted) return;
+    if (!filename) return;
+
+    const encodedFilename = encodeURIComponent(filename);
+    if (currentAnnouncementAudio && currentAnnouncementAudio.src.includes(encodedFilename)) {
+      if (currentAnnouncementAudio.paused) {
+        currentAnnouncementAudio.play().catch(() => {});
+      }
+      return;
+    }
+
+    stopAnnouncementMusic(0);
+
+    const audioUrl = `/Music/${encodedFilename}`;
+    currentAnnouncementAudio = new Audio(audioUrl);
+    currentAnnouncementAudio.loop = !!loop;
+    currentAnnouncementAudio.volume = 1.0;
+
+    currentAnnouncementAudio.addEventListener('loadedmetadata', () => {
+      if (seekSeconds > 0 && seekSeconds < currentAnnouncementAudio.duration) {
+        currentAnnouncementAudio.currentTime = seekSeconds;
+      }
+    });
+
+    if (onEndedCallback) {
+      currentAnnouncementAudio.onended = onEndedCallback;
+    }
+
+    currentAnnouncementAudio.play().catch(err => {
+      console.warn('Public announcement music playback blocked by browser policy:', err);
+    });
+  }
+
+  function stopAnnouncementMusic(fadeSeconds = 0.8) {
+    if (fadeInterval) clearInterval(fadeInterval);
+    if (!currentAnnouncementAudio) return;
+
+    const audioToStop = currentAnnouncementAudio;
+    currentAnnouncementAudio = null;
+
+    if (fadeSeconds > 0 && !audioToStop.paused && audioToStop.volume > 0.05) {
+      const fadeSteps = 16;
+      const intervalMs = (fadeSeconds * 1000) / fadeSteps;
+      const volStep = audioToStop.volume / fadeSteps;
+
+      fadeInterval = setInterval(() => {
+        try {
+          if (audioToStop.volume > volStep) {
+            audioToStop.volume = Math.max(0, audioToStop.volume - volStep);
+          } else {
+            clearInterval(fadeInterval);
+            audioToStop.pause();
+            audioToStop.currentTime = 0;
+          }
+        } catch (e) {
+          clearInterval(fadeInterval);
+        }
+      }, intervalMs);
+    } else {
+      try {
+        audioToStop.pause();
+        audioToStop.currentTime = 0;
+      } catch (e) {}
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', preloadLaunchAudio);
 
   window.AudioEngine = {
@@ -263,6 +333,8 @@
     playClickSound,
     playLaunchCeremonySound,
     playAnnouncementChime,
+    playAnnouncementMusic,
+    stopAnnouncementMusic,
     playTickSound,
     playVictoryFanfare,
     isMuted: () => isMuted

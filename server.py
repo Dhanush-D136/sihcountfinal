@@ -82,12 +82,25 @@ def init_db():
                 duration_seconds INTEGER DEFAULT 60,
                 priority TEXT DEFAULT 'NORMAL',
                 sound_enabled INTEGER DEFAULT 1,
+                audio_file TEXT,
+                loop_audio INTEGER DEFAULT 0,
+                until_song_complete INTEGER DEFAULT 0,
                 status TEXT DEFAULT 'SCHEDULED',
                 scheduled_timestamp REAL,
                 displayed_timestamp REAL,
                 created_at REAL NOT NULL
             )
         ''')
+        
+        # Ensure schema migrations for existing DB instances
+        cursor.execute("PRAGMA table_info(announcements)")
+        existing_cols = [row['name'] for row in cursor.fetchall()]
+        if 'audio_file' not in existing_cols:
+            cursor.execute("ALTER TABLE announcements ADD COLUMN audio_file TEXT")
+        if 'loop_audio' not in existing_cols:
+            cursor.execute("ALTER TABLE announcements ADD COLUMN loop_audio INTEGER DEFAULT 0")
+        if 'until_song_complete' not in existing_cols:
+            cursor.execute("ALTER TABLE announcements ADD COLUMN until_song_complete INTEGER DEFAULT 0")
         
         # Seed initial event state if empty
         cursor.execute('SELECT COUNT(*) FROM event_state')
@@ -457,6 +470,41 @@ def admin_edit_timer():
     log_audit('EDIT_TIMER', DEFAULT_ADMIN_USER, f'Timer adjusted to {hours:02d}:{minutes:02d}:{seconds:02d}', request.remote_addr or '')
     return jsonify({'success': True, 'event': calculate_event_state()}), 200
 
+# Music Discovery API Endpoint
+@app.route('/api/music/list', methods=['GET'])
+def get_music_list():
+    import re
+    music_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'Music'))
+    supported_extensions = ('.mp3', '.wav', '.ogg', '.m4a')
+    music_files = [
+        {
+            'id': '',
+            'filename': '',
+            'title': 'None — No Sound',
+            'url': ''
+        }
+    ]
+    
+    if os.path.exists(music_dir):
+        for fname in sorted(os.listdir(music_dir)):
+            if fname.lower().endswith(supported_extensions):
+                name_without_ext = os.path.splitext(fname)[0]
+                clean_name = re.sub(r'^\d+[\s._-]*', '', name_without_ext).strip()
+                clean_name = clean_name.replace('_', ' ').replace('-', ' ').strip()
+                clean_name = ' '.join(word.capitalize() for word in clean_name.split())
+                
+                if not clean_name:
+                    clean_name = name_without_ext
+                    
+                music_files.append({
+                    'id': fname,
+                    'filename': fname,
+                    'title': clean_name,
+                    'url': f'/Music/{fname}'
+                })
+                
+    return jsonify({'music': music_files}), 200
+
 # Announcements Management Endpoints
 @app.route('/api/admin/announcements/create', methods=['POST'])
 @admin_required
@@ -468,11 +516,23 @@ def admin_create_announcement():
     duration_seconds = int(data.get('duration_seconds', 60))
     priority = data.get('priority', 'NORMAL').upper()
     sound_enabled = 1 if data.get('sound_enabled', True) else 0
+    audio_file_raw = data.get('audio_file')
+    audio_file = audio_file_raw.strip() if (audio_file_raw and isinstance(audio_file_raw, str)) else None
+    if not audio_file:
+        audio_file = None
+    loop_audio = 1 if data.get('loop_audio', False) else 0
+    until_song_complete = 1 if data.get('until_song_complete', False) else 0
     display_now = data.get('display_now', True)
     scheduled_ts = data.get('scheduled_timestamp')
 
     if not heading or not details:
         return jsonify({'error': 'Heading and details are required'}), 400
+
+    if audio_file:
+        music_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'Music'))
+        safe_path = os.path.abspath(os.path.join(music_dir, audio_file))
+        if not safe_path.startswith(music_dir) or not os.path.exists(safe_path):
+            return jsonify({'error': 'Selected audio file does not exist in Music folder'}), 400
 
     now = time.time()
     status = 'ACTIVE' if display_now else 'SCHEDULED'
@@ -481,14 +541,14 @@ def admin_create_announcement():
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO announcements (heading, time_label, details, duration_seconds, priority, sound_enabled, status, scheduled_timestamp, displayed_timestamp, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (heading, time_label, details, duration_seconds, priority, sound_enabled, status, scheduled_ts, displayed_ts, now))
+            INSERT INTO announcements (heading, time_label, details, duration_seconds, priority, sound_enabled, audio_file, loop_audio, until_song_complete, status, scheduled_timestamp, displayed_timestamp, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (heading, time_label, details, duration_seconds, priority, sound_enabled, audio_file, loop_audio, until_song_complete, status, scheduled_ts, displayed_ts, now))
         conn.commit()
         ann_id = cursor.lastrowid
 
     action_text = 'DISPLAY_NOW' if display_now else 'SCHEDULED'
-    log_audit(f'ANNOUNCEMENT_{action_text}', DEFAULT_ADMIN_USER, f'[{heading}] Priority: {priority}, Duration: {duration_seconds}s', request.remote_addr or '')
+    log_audit(f'ANNOUNCEMENT_{action_text}', DEFAULT_ADMIN_USER, f'[{heading}] Music: {audio_file or "None"}, Priority: {priority}, Duration: {duration_seconds}s', request.remote_addr or '')
     return jsonify({'success': True, 'id': ann_id, 'event': calculate_event_state()}), 200
 
 @app.route('/api/admin/announcements/trigger', methods=['POST'])
@@ -521,6 +581,11 @@ def admin_delete_announcement():
 
     log_audit('ANNOUNCEMENT_DELETE', DEFAULT_ADMIN_USER, f'Deleted announcement ID {ann_id}', request.remote_addr or '')
     return jsonify({'success': True, 'event': calculate_event_state()}), 200
+
+@app.route('/Music/<path:filename>')
+def serve_music(filename):
+    music_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'Music'))
+    return send_from_directory(music_dir, filename)
 
 # Static file routes
 @app.route('/')

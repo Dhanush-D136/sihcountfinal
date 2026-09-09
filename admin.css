@@ -658,3 +658,186 @@
   justify-content: flex-end;
   margin-top: 1rem;
 }
+
+.flex-gap-3 {
+  gap: 0.75rem;
+}
+
+.flex-grow {
+  flex: 1;
+}
+
+/* Music Selection & Preview Row */
+.music-row {
+  margin-top: 0.5rem;
+}
+
+.music-select-group {
+  flex: 2;
+}
+
+.music-dropdown-wrapper {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.preview-audio-btn {
+  white-space: nowrap;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+}
+
+.preview-audio-btn.playing {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.preview-audio-btn.disabled-btn, .preview-audio-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: rgba(30, 41, 59, 0.4);
+  border-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-dim);
+}
+
+/* Duration Segmented Selector */
+.duration-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.duration-segmented-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 0.4rem;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+}
+
+.duration-pill {
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.duration-pill.pill-disabled, .duration-pill:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.duration-pill:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.duration-pill.active {
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.25), rgba(121, 40, 202, 0.25));
+  border-color: var(--accent-cyan);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+}
+
+/* Custom Duration Grid */
+.custom-duration-wrapper {
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px dashed var(--accent-cyan);
+  margin-top: 0.4rem;
+}
+
+.custom-duration-grid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+}
+
+.custom-dur-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  width: 70px;
+}
+
+.unit-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.dur-colon {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--accent-cyan);
+  margin-top: 0.8rem;
+}
+
+/* Checkbox Toggle Options */
+.ann-options-row {
+  display: flex;
+  align-items: center;
+  margin-top: 0.4rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+}
+
+.checkbox-label:hover span {
+  color: var(--accent-cyan);
+}
+
+/* Admin Preview Tag & Modal overrides */
+.preview-mode-tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  background: rgba(234, 179, 8, 0.2);
+  border: 1px solid rgba(234, 179, 8, 0.5);
+  color: #fde047;
+}
+
+.preview-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.btn-sm {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+}

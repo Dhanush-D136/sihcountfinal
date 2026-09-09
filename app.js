@@ -223,7 +223,24 @@
   // 8. Handle Live Announcement Overlay Display
   function handleAnnouncementOverlay(ann) {
     if (!ann) {
+      if (lastAnnId !== null) {
+        announcementOverlay.classList.add('hidden');
+        window.AudioEngine.stopAnnouncementMusic(0.8);
+        lastAnnId = null;
+      }
+      return;
+    }
+
+    const nowClientSeconds = Date.now() / 1000;
+    const nowServerSeconds = nowClientSeconds + serverClockOffset;
+    const elapsedSeconds = Math.max(0, nowServerSeconds - (ann.displayed_timestamp || nowServerSeconds));
+    const duration = ann.duration_seconds || 60;
+    const remainingSecondsFloat = Math.max(0, duration - elapsedSeconds);
+    const remainingSecondsInt = Math.ceil(remainingSecondsFloat);
+
+    if (remainingSecondsFloat <= 0 && !ann.until_song_complete) {
       announcementOverlay.classList.add('hidden');
+      window.AudioEngine.stopAnnouncementMusic(0.8);
       lastAnnId = null;
       return;
     }
@@ -234,19 +251,45 @@
     annHeading.textContent = ann.heading;
     annDetails.textContent = ann.details;
 
-    const remaining = ann.remaining_duration || 0;
-    const duration = ann.duration_seconds || 60;
-    const pct = Math.min(100, Math.max(0, (remaining / duration) * 100));
-
-    annProgressFill.style.width = `${pct}%`;
-    annTimerText.innerHTML = `<i class="fa-solid fa-hourglass-half"></i> Auto-dismissing in ${remaining}s`;
+    // Smooth transform scaling (Right to Left: 1.0 -> 0.0)
+    const progressRatio = Math.max(0, Math.min(1, 1 - (elapsedSeconds / duration)));
+    annProgressFill.style.transform = `scaleX(${progressRatio})`;
+    
+    if (ann.until_song_complete) {
+      annTimerText.innerHTML = `<i class="fa-solid fa-music"></i> Playing until song completes`;
+    } else {
+      annTimerText.innerHTML = `<i class="fa-solid fa-hourglass-half"></i> DISMISSING IN ${remainingSecondsInt}s`;
+    }
 
     announcementOverlay.classList.remove('hidden');
 
+    // Smooth fade out when 1 second remains
+    if (remainingSecondsFloat <= 1.0 && !ann.until_song_complete) {
+      window.AudioEngine.stopAnnouncementMusic(0.8);
+    }
+
     if (lastAnnId !== ann.id) {
       lastAnnId = ann.id;
-      if (ann.sound_enabled) {
+      
+      // Explicit Audio Check: Only play audio if audio_file is specified!
+      if (ann.sound_enabled && ann.audio_file) {
         window.AudioEngine.playAnnouncementChime(ann.priority);
+
+        const seekOffset = Math.max(0, elapsedSeconds);
+        window.AudioEngine.playAnnouncementMusic(
+          ann.audio_file,
+          ann.loop_audio,
+          seekOffset,
+          () => {
+            if (ann.until_song_complete) {
+              announcementOverlay.classList.add('hidden');
+              lastAnnId = null;
+            }
+          }
+        );
+      } else {
+        // NONE — NO SOUND selected: Ensure zero audio plays
+        window.AudioEngine.stopAnnouncementMusic(0);
       }
     }
   }

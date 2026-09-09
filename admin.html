@@ -282,42 +282,48 @@
                 <span class="preset-label">Quick Presets:</span>
                 <button type="button" class="ann-preset-btn" data-head="BREAKFAST" data-time="08:00 AM" data-det="Breakfast is now available at the dining hall. Participants may proceed in an orderly manner.">BREAKFAST</button>
                 <button type="button" class="ann-preset-btn" data-head="LUNCH" data-time="01:00 PM" data-det="Lunch is now served. Please visit the main dining hall.">LUNCH</button>
-                <button type="button" class="ann-preset-btn" data-head="ROUND 2 STARTS" data-time="10:00 AM" data-det="Round 2 evaluation begins now. All teams must report to their assigned stalls.">ROUND 2</button>
-                <button type="button" class="ann-preset-btn" data-head="FINAL SUBMISSION" data-time="04:30 PM" data-det="All teams must complete project uploads before the deadline.">SUBMISSION</button>
-                <button type="button" class="ann-preset-btn" data-head="JUDGING ROUND" data-time="05:00 PM" data-det="Jury members are arriving. Keep project demos ready.">JUDGING</button>
+                <button type="button" class="ann-preset-btn" data-head="DINNER" data-time="08:00 PM" data-det="Dinner is now served. Please visit the dining hall.">DINNER</button>
+                <button type="button" class="ann-preset-btn" data-head="ROUND 2 STARTS" data-time="10:00 AM" data-det="Round 2 evaluation begins now. All teams must report to their assigned stalls.">ROUND START</button>
+                <button type="button" class="ann-preset-btn" data-head="ROUND 2 ENDS" data-time="01:00 PM" data-det="Round 2 evaluation is complete. Teams may take a short break.">ROUND END</button>
+                <button type="button" class="ann-preset-btn" data-head="SUBMISSION DEADLINE" data-time="04:30 PM" data-det="All teams must complete final project uploads before the deadline.">SUBMISSION DEADLINE</button>
+                <button type="button" class="ann-preset-btn" data-head="JUDGING ROUND" data-time="05:00 PM" data-det="Jury members are arriving. Keep project demos and slides ready.">JUDGING</button>
+                <button type="button" class="ann-preset-btn" data-head="TEA & SNACKS BREAK" data-time="04:00 PM" data-det="Tea and snacks are being served in the main concourse.">BREAK</button>
+                <button type="button" class="ann-preset-btn" data-head="IMPORTANT NOTICE" data-time="LIVE" data-det="Attention all participants: Please check the dashboard for an important update.">IMPORTANT NOTICE</button>
               </div>
 
               <form id="announcementForm" class="announcement-form">
                 <div class="form-row-grid">
                   <div class="form-group">
-                    <label class="form-label">Heading</label>
+                    <label class="form-label">MAIN HEADING</label>
                     <input type="text" id="annFormHeading" class="form-input" placeholder="e.g. BREAKFAST" required>
                   </div>
                   <div class="form-group">
-                    <label class="form-label">Time Label</label>
+                    <label class="form-label">TIME LABEL (OPTIONAL)</label>
                     <input type="text" id="annFormTime" class="form-input" placeholder="e.g. 08:00 AM">
                   </div>
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label">Details / Instructions</label>
+                  <label class="form-label">DETAILS / MESSAGE</label>
                   <textarea id="annFormDetails" class="form-input form-textarea" rows="3" placeholder="Enter full announcement details for participant displays..." required></textarea>
                 </div>
 
-                <div class="form-row-grid">
-                  <div class="form-group">
-                    <label class="form-label">Duration</label>
-                    <select id="annFormDuration" class="form-input">
-                      <option value="15">15 Seconds</option>
-                      <option value="30">30 Seconds</option>
-                      <option value="60" selected>60 Seconds (Default)</option>
-                      <option value="90">90 Seconds</option>
-                      <option value="120">120 Seconds</option>
-                    </select>
+                <!-- Music Selection & Audio Preview -->
+                <div class="form-row-grid music-row">
+                  <div class="form-group music-select-group">
+                    <label class="form-label">SELECT NOTIFICATION MUSIC</label>
+                    <div class="music-dropdown-wrapper">
+                      <select id="annFormMusic" class="form-input">
+                        <option value="">None — No Sound</option>
+                      </select>
+                      <button type="button" id="previewAudioBtn" class="admin-btn admin-btn-subtle preview-audio-btn" title="Preview audio on admin device only">
+                        <i class="fa-solid fa-play" id="previewAudioIcon"></i> <span id="previewAudioBtnText">PREVIEW</span>
+                      </button>
+                    </div>
                   </div>
 
                   <div class="form-group">
-                    <label class="form-label">Priority Level</label>
+                    <label class="form-label">PRIORITY LEVEL</label>
                     <select id="annFormPriority" class="form-input">
                       <option value="NORMAL" selected>NORMAL (Cyan)</option>
                       <option value="IMPORTANT">IMPORTANT (Gold)</option>
@@ -326,12 +332,86 @@
                   </div>
                 </div>
 
-                <div class="form-action-bar">
-                  <button type="button" id="triggerNowBtn" class="admin-btn admin-btn-primary">
+                <!-- Duration Control & Loop Toggle -->
+                <div class="form-group duration-control-group">
+                  <label class="form-label">ANNOUNCEMENT DURATION</label>
+                  <div class="duration-segmented-bar" id="durationSegmentedBar">
+                    <button type="button" class="duration-pill" data-value="30">30 sec</button>
+                    <button type="button" class="duration-pill" data-value="45">45 sec</button>
+                    <button type="button" class="duration-pill active" data-value="60">1 min</button>
+                    <button type="button" class="duration-pill" data-value="120">2 min</button>
+                    <button type="button" class="duration-pill" data-value="180">3 min</button>
+                    <button type="button" class="duration-pill" data-value="240">4 min</button>
+                    <button type="button" class="duration-pill" data-value="300">5 min</button>
+                    <button type="button" class="duration-pill" data-value="until_complete">Until song completes</button>
+                    <button type="button" class="duration-pill" data-value="custom">Custom</button>
+                  </div>
+
+                  <!-- Custom Duration Input Grid (Visible when Custom is selected) -->
+                  <div class="custom-duration-wrapper hidden" id="customDurationWrapper">
+                    <div class="custom-duration-grid">
+                      <div class="custom-dur-unit">
+                        <span class="unit-label">Hours</span>
+                        <input type="number" id="customDurHours" min="0" max="23" value="0" class="form-input text-center">
+                      </div>
+                      <span class="dur-colon">:</span>
+                      <div class="custom-dur-unit">
+                        <span class="unit-label">Minutes</span>
+                        <input type="number" id="customDurMinutes" min="0" max="59" value="1" class="form-input text-center">
+                      </div>
+                      <span class="dur-colon">:</span>
+                      <div class="custom-dur-unit">
+                        <span class="unit-label">Seconds</span>
+                        <input type="number" id="customDurSeconds" min="0" max="59" value="30" class="form-input text-center">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Options Row (Loop Toggle) -->
+                  <div class="ann-options-row">
+                    <label class="checkbox-label" title="Repeat audio until announcement duration ends">
+                      <input type="checkbox" id="annLoopMusicCheckbox">
+                      <span><i class="fa-solid fa-repeat"></i> LOOP MUSIC (Repeat audio until duration ends)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-action-bar flex-gap-3">
+                  <button type="button" id="previewAnnOverlayBtn" class="admin-btn admin-btn-subtle">
+                    <i class="fa-solid fa-eye"></i> PREVIEW ANNOUNCEMENT
+                  </button>
+                  <button type="button" id="triggerNowBtn" class="admin-btn admin-btn-primary flex-grow">
                     <i class="fa-solid fa-paper-plane"></i> DISPLAY ANNOUNCEMENT NOW
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+
+          <!-- Announcement History Section -->
+          <div class="admin-card announcement-history-card full-width">
+            <div class="card-header">
+              <h2 class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Live Announcement History</h2>
+            </div>
+            <div class="card-body">
+              <div class="audit-table-wrapper">
+                <table class="audit-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Main Heading</th>
+                      <th>Notification Music</th>
+                      <th>Duration</th>
+                      <th>Priority</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="annHistoryTableBody">
+                    <tr><td colspan="7" class="text-center">No announcements broadcast yet.</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -384,7 +464,37 @@
     </div>
   </div>
 
+  <!-- Admin Announcement Preview Modal Overlay -->
+  <div id="adminAnnPreviewModal" class="announcement-overlay hidden">
+    <div class="announcement-glass-card" id="adminPreviewGlassCard">
+      <div class="ann-card-header">
+        <span class="ann-badge" id="adminPreviewPriorityBadge">NORMAL</span>
+        <span class="preview-mode-tag"><i class="fa-solid fa-eye"></i> LOCAL PREVIEW ONLY</span>
+        <div class="ann-time-tag"><i class="fa-solid fa-clock"></i> <span id="adminPreviewTimeLabel">08:00 AM</span></div>
+      </div>
+
+      <h2 class="ann-title" id="adminPreviewHeading">BREAKFAST</h2>
+      
+      <p class="ann-details" id="adminPreviewDetails">
+        Breakfast is now available at the dining hall.
+      </p>
+
+      <div class="ann-card-footer">
+        <div class="ann-progress-bar">
+          <div class="ann-progress-fill" id="adminPreviewProgressFill" style="width: 100%;"></div>
+        </div>
+        <div class="preview-footer-actions">
+          <span class="ann-timer-text" id="adminPreviewTimerText"><i class="fa-solid fa-hourglass-half"></i> Previewing (60s)</span>
+          <button id="closeAdminPreviewBtn" class="admin-btn admin-btn-danger btn-sm">
+            <i class="fa-solid fa-xmark"></i> CLOSE PREVIEW
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modular Scripts -->
+  <script src="/audio.js"></script>
   <script src="/background.js"></script>
   <script src="/admin.js"></script>
 </body>
