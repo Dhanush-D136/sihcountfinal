@@ -16,7 +16,11 @@ from flask import Flask, request, jsonify, send_from_directory, make_response, R
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
-DB_PATH = 'sih_database.db'
+# Set SQLite Database path dynamically (uses /tmp on read-only serverless platforms like Vercel)
+if os.environ.get('VERCEL') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME') or not os.access('.', os.W_OK):
+    DB_PATH = '/tmp/sih_database.db'
+else:
+    DB_PATH = 'sih_database.db'
 
 DEFAULT_ADMIN_USER = os.environ.get('ADMIN_USERNAME', 'Vel Tech SIH')
 DEFAULT_ADMIN_PASS = os.environ.get('ADMIN_PASSWORD', 'veltechsmarthack123')
@@ -239,8 +243,9 @@ def scheduled_announcement_worker():
             print('Scheduler worker error:', e)
         time.sleep(1)
 
-scheduler_thread = threading.Thread(target=scheduled_announcement_worker, daemon=True)
-scheduler_thread.start()
+if not os.environ.get('VERCEL'):
+    scheduler_thread = threading.Thread(target=scheduled_announcement_worker, daemon=True)
+    scheduler_thread.start()
 
 # ==========================================================================
 # PUBLIC API ENDPOINTS
