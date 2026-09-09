@@ -17,14 +17,129 @@ from flask_cors import CORS
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
+# Auto-load .env configuration
+def load_env():
+    env_path = os.path.join(os.path.dirname(__file__), '.env')
+    if os.path.exists(env_path):
+        with open(env_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    k, v = line.split('=', 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip("'\""))
+
+load_env()
+
 # Configure CORS for Vercel Frontend and Local Dev origins
 CORS(app, supports_credentials=True, origins=r"https://.*\.vercel\.app|http://localhost:.*|http://127\.0\.0\.1:.*")
 
-# Set SQLite Database path dynamically (uses /tmp on read-only serverless platforms like Vercel)
+# Set SQLite Database path dynamically as fallback
 if os.environ.get('VERCEL') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME') or not os.access('.', os.W_OK):
     DB_PATH = '/tmp/sih_database.db'
 else:
     DB_PATH = 'sih_database.db'
+
+# Supabase PostgreSQL Database Driver Setup
+DB_URL = os.environ.get('DATABASE_URL')
+USE_POSTGRES = bool(DB_URL and ('postgresql://' in DB_URL or 'postgres://' in DB_URL))
+HAS_PSYCOPG2 = False
+
+if USE_POSTGRES:
+    try:
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        HAS_PSYCOPG2 = True
+    except ImportError:
+        HAS_PSYCOPG2 = False
+
+class DBCursor:
+    def __init__(self, cursor, is_postgres):
+        self.cursor = cursor
+        self.is_postgres = is_postgres
+        self._lastrowid = None
+
+    @property
+    def lastrowid(self):
+        if self._lastrowid is not None:
+            return self._lastrowid
+        return getattr(self.cursor, 'lastrowid', None)
+
+    def execute(self, sql, params=()):
+        if self.is_postgres:
+            sql = sql.replace('?', '%s')
+            sql = sql.replace('INTEGER PRIMARY KEY AUTOINCREMENT', 'SERIAL PRIMARY KEY')
+            if 'PRAGMA table_info' in sql:
+                sql = "SELECT column_name AS name FROM information_schema.columns WHERE table_name = 'announcements'"
+            if sql.strip().upper().startswith('INSERT') and 'RETURNING id' not in sql:
+                sql = sql.rstrip().rstrip(';') + ' RETURNING id;'
+                
+        self.cursor.execute(sql, params)
+        if self.is_postgres:
+            if self.cursor.description and 'RETURNING id' in sql:
+                try:
+                    row = self.cursor.fetchone()
+                    if row:
+                        if isinstance(row, dict) and 'id' in row:
+                            self._lastrowid = row['id']
+                        elif hasattr(row, 'keys') and 'id' in row:
+                            self._lastrowid = row['id']
+                        elif isinstance(row, (tuple, list)):
+                            self._lastrowid = row[0]
+                except Exception:
+                    pass
+        return self
+
+    def fetchone(self):
+        row = self.cursor.fetchone()
+        if row is None:
+            return None
+        if isinstance(row, dict):
+            return row
+        return dict(row)
+
+    def fetchall(self):
+        rows = self.cursor.fetchall()
+        return [dict(r) if hasattr(r, 'keys') or isinstance(r, dict) else r for r in rows]
+
+class DBConnection:
+    def __init__(self, db_url=None):
+        self.db_url = db_url or os.environ.get('DATABASE_URL')
+        self.is_postgres = bool(HAS_PSYCOPG2 and self.db_url and ('postgresql://' in self.db_url or 'postgres://' in self.db_url))
+        if self.is_postgres:
+            url = self.db_url.replace('postgres://', 'postgresql://', 1)
+            self.conn = psycopg2.connect(url)
+            self.conn.autocommit = True
+        else:
+            self.conn = sqlite3.connect(DB_PATH)
+            self.conn.row_factory = sqlite3.Row
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            if not self.is_postgres and hasattr(self.conn, 'rollback'):
+                self.conn.rollback()
+        else:
+            if not self.is_postgres and hasattr(self.conn, 'commit'):
+                self.conn.commit()
+        self.close()
+
+    def cursor(self):
+        if self.is_postgres:
+            return DBCursor(self.conn.cursor(cursor_factory=RealDictCursor), True)
+        else:
+            return DBCursor(self.conn.cursor(), False)
+
+    def commit(self):
+        if not self.is_postgres:
+            self.conn.commit()
+
+    def close(self):
+        try:
+            self.conn.close()
+        except Exception:
+            pass
 
 DEFAULT_ADMIN_USER = os.environ.get('ADMIN_USERNAME', 'Vel Tech SIH')
 DEFAULT_ADMIN_PASS = os.environ.get('ADMIN_PASSWORD', 'veltechsmarthack123')
@@ -37,9 +152,7 @@ ADMIN_PASSWORD_HASH = hash_password(DEFAULT_ADMIN_PASS)
 
 # 1. Database Setup
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return DBConnection()
 
 def init_db():
     with get_db() as conn:
@@ -102,17 +215,28 @@ def init_db():
         
         # Ensure schema migrations for existing DB instances
         cursor.execute("PRAGMA table_info(announcements)")
-        existing_cols = [row['name'] for row in cursor.fetchall()]
+        existing_cols = [row['name'] for row in cursor.fetchall() if isinstance(row, dict) and 'name' in row]
         if 'audio_file' not in existing_cols:
-            cursor.execute("ALTER TABLE announcements ADD COLUMN audio_file TEXT")
+            try:
+                cursor.execute("ALTER TABLE announcements ADD COLUMN audio_file TEXT")
+            except Exception:
+                pass
         if 'loop_audio' not in existing_cols:
-            cursor.execute("ALTER TABLE announcements ADD COLUMN loop_audio INTEGER DEFAULT 0")
+            try:
+                cursor.execute("ALTER TABLE announcements ADD COLUMN loop_audio INTEGER DEFAULT 0")
+            except Exception:
+                pass
         if 'until_song_complete' not in existing_cols:
-            cursor.execute("ALTER TABLE announcements ADD COLUMN until_song_complete INTEGER DEFAULT 0")
+            try:
+                cursor.execute("ALTER TABLE announcements ADD COLUMN until_song_complete INTEGER DEFAULT 0")
+            except Exception:
+                pass
         
         # Seed initial event state if empty
         cursor.execute('SELECT COUNT(*) FROM event_state')
-        if cursor.fetchone()[0] == 0:
+        res = cursor.fetchone()
+        count_val = list(res.values())[0] if isinstance(res, dict) else (res[0] if res else 0)
+        if count_val == 0:
             cursor.execute('''
                 INSERT INTO event_state (id, status, duration_seconds, start_timestamp, pause_timestamp, remaining_seconds_when_paused, updated_at)
                 VALUES (1, 'NOT_STARTED', 86400, NULL, NULL, NULL, ?)
