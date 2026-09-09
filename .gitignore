@@ -1,0 +1,14 @@
+# Database & runtime files
+sih_database.db
+*.db-journal
+*.sqlite3
+__pycache__/
+*.pyc
+
+# Environment & IDE
+.venv/
+env/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

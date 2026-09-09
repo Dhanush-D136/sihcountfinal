@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart India Hackathon 2026 - Internal Hackathon | Vel Tech High Tech</title>
+  <meta name="description" content="Official 24-Hour Cinematic Countdown for Smart India Hackathon 2026 Internal Hackathon conducted at Vel Tech High Tech Dr. Rangarajan Dr. Sakunthala Engineering College.">
+  
+  <base href="/">
+
+  <!-- Premium Fonts from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,400&family=Sora:wght@400;600;700;800&family=Space+Grotesk:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Core Stylesheet -->
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="state-prelaunch">
+
+  <!-- Canvas Layers for Dynamic FX & Background -->
+  <canvas id="bgCanvas" class="fx-canvas-bg"></canvas>
+  <canvas id="fxCanvas" class="fx-canvas-fg"></canvas>
+
+  <!-- Flash Screen Overlay for Cinematic Transitions -->
+  <div id="flashOverlay" class="flash-overlay" aria-hidden="true"></div>
+
+  <!-- Top Toolbar / Floating Control Panel -->
+  <div class="control-bar" id="controlBar">
+    <div class="control-left">
+      <span class="status-badge" id="headerStatusBadge">
+        <span class="status-dot"></span>
+        <span id="headerStatusText">PRE-LAUNCH STATE</span>
+      </span>
+    </div>
+    <div class="control-right">
+      <button id="soundToggleBtn" class="control-btn" title="Toggle Sci-Fi SFX" aria-label="Toggle Sound">
+        <i class="fa-solid fa-volume-xmark" id="soundIcon"></i>
+        <span class="btn-text">SOUND OFF</span>
+      </button>
+
+      <button id="eventModeBtn" class="control-btn control-btn-primary" title="Toggle Auditorium Event Mode (Hotkey: F)" aria-label="Toggle Event Mode">
+        <i class="fa-solid fa-expand" id="eventModeIcon"></i>
+        <span class="btn-text">ENTER EVENT MODE</span>
+      </button>
+
+      <button id="resetTimerBtn" class="control-btn control-btn-subtle" title="Reset Hackathon Timer (Admin)" aria-label="Reset Timer">
+        <i class="fa-solid fa-rotate-left"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Web Content Container -->
+  <main class="main-wrapper" id="mainWrapper">
+
+    <!-- Branding & Header Section -->
+    <header class="header-section" id="headerSection">
+      <div class="branding-bar">
+        
+        <!-- Vel Tech Logo Container -->
+        <div class="logo-box veltech-logo-box">
+          <img src="/Vel_Tech_Logo_Clean.png" alt="Vel Tech High Tech Dr. Rangarajan Dr. Sakunthala Engineering College Logo" class="brand-logo veltech-img">
+        </div>
+
+        <div class="branding-divider">
+          <div class="divider-line"></div>
+          <div class="divider-gem"></div>
+          <div class="divider-line"></div>
+        </div>
+
+        <!-- SIH Logo Container -->
+        <div class="logo-box sih-logo-box">
+          <img src="/SIH_Logo_Clean.png" alt="Smart India Hackathon 2026 Logo" class="brand-logo sih-img">
+        </div>
+
+      </div>
+
+      <div class="college-info-block">
+        <h2 class="college-title-main">Vel Tech High Tech</h2>
+        <h3 class="college-title-sub">Dr. Rangarajan Dr. Sakunthala Engineering College</h3>
+        <h4 class="college-title-tag">An Autonomous Institution</h4>
+        <div class="event-title-badge">
+          <span class="badge-accent">NATIONAL INITIATIVE</span>
+          <span class="badge-text">INTERNAL HACKATHON</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Dynamic Hero Workspace -->
+    <section class="hero-section" id="heroSection">
+      
+      <!-- Event Header Banner -->
+      <div class="event-main-header">
+        <div class="sih-tagline">MINISTRY OF EDUCATION • INNOVATION CELL • AICTE</div>
+        <h1 class="main-event-title">
+          <span class="title-primary">SMART INDIA HACKATHON</span>
+          <span class="title-year">2026</span>
+        </h1>
+        <div class="subtitle-bar">
+          <span class="sub-pill">24 HOURS</span>
+          <span class="sub-dot">•</span>
+          <span class="sub-pill">INNOVATION</span>
+          <span class="sub-dot">•</span>
+          <span class="sub-pill">TECHNOLOGY</span>
+          <span class="sub-dot">•</span>
+          <span class="sub-pill">IMPACT</span>
+        </div>
+      </div>
+
+      <!-- PRE-LAUNCH STATE CONTENT -->
+      <div class="prelaunch-container" id="prelaunchContainer">
+        <h2 class="prelaunch-title">
+          <span class="title-glow">THE COUNTDOWN</span> BEGINS
+        </h2>
+        <p class="prelaunch-description">
+          24 Hours of Non-Stop Coding, Problem Solving, & Prototype Development
+        </p>
+
+        <!-- Glass Start Button -->
+        <div class="start-button-wrapper">
+          <button id="startHackathonBtn" class="start-btn" aria-label="Start Hackathon 24 Hour Countdown">
+            <div class="btn-glow-border"></div>
+            <div class="btn-shine"></div>
+            <div class="btn-content">
+              <i class="fa-solid fa-bolt btn-icon"></i>
+              <span class="btn-main-text">START HACKATHON</span>
+              <i class="fa-solid fa-arrow-right btn-arrow"></i>
+            </div>
+          </button>
+          <span class="start-subtext">
+            <i class="fa-solid fa-play"></i> Press to begin the 24-hour challenge
+          </span>
+        </div>
+      </div>
+
+      <!-- COUNTDOWN TIMER CONTAINER (Visible during active countdown & completion) -->
+      <div class="countdown-container hidden" id="countdownContainer">
+        
+        <!-- Live Countdown Grid (3 Huge Timer Cards) -->
+        <div class="timer-grid">
+          
+          <!-- HOURS CARD -->
+          <div class="timer-card" id="cardHours">
+            <div class="card-glass-bg"></div>
+            <div class="card-glow"></div>
+            <div class="card-border-sweep"></div>
+            <div class="card-body">
+              <div class="digit-wrapper">
+                <span class="digit" id="digitHours">24</span>
+              </div>
+              <div class="timer-label">HOURS</div>
+            </div>
+            <div class="card-footer-glow"></div>
+          </div>
+
+          <div class="timer-colon">:</div>
+
+          <!-- MINUTES CARD -->
+          <div class="timer-card" id="cardMinutes">
+            <div class="card-glass-bg"></div>
+            <div class="card-glow"></div>
+            <div class="card-border-sweep"></div>
+            <div class="card-body">
+              <div class="digit-wrapper">
+                <span class="digit" id="digitMinutes">00</span>
+              </div>
+              <div class="timer-label">MINUTES</div>
+            </div>
+            <div class="card-footer-glow"></div>
+          </div>
+
+          <div class="timer-colon">:</div>
+
+          <!-- SECONDS CARD -->
+          <div class="timer-card timer-card-active" id="cardSeconds">
+            <div class="card-glass-bg"></div>
+            <div class="card-glow"></div>
+            <div class="card-border-sweep"></div>
+            <div class="card-body">
+              <div class="digit-wrapper">
+                <span class="digit" id="digitSeconds">00</span>
+              </div>
+              <div class="timer-label">SECONDS</div>
+            </div>
+            <div class="card-footer-glow"></div>
+          </div>
+
+        </div>
+
+        <!-- Dynamic Time Elapsed Progress Bar -->
+        <div class="progress-bar-wrapper">
+          <div class="progress-info">
+            <span class="progress-label"><i class="fa-solid fa-clock"></i> HACKATHON ELAPSED PROGRESS</span>
+            <span class="progress-percentage" id="progressPercentage">0.0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progressFill" style="width: 0%;">
+              <div class="progress-glow"></div>
+            </div>
+          </div>
+          <div class="progress-timestamps">
+            <span id="startTimeLabel">START: --:--</span>
+            <span id="targetTimeLabel">FINISH: --:--</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- COMPLETION SCREEN OVERLAY CONTAINER -->
+      <div class="completion-container hidden" id="completionContainer">
+        <div class="completion-content">
+          <div class="completion-badge">
+            <i class="fa-solid fa-trophy"></i> CHALLENGE COMPLETE
+          </div>
+          <h2 class="completion-title">TIME'S UP</h2>
+          <h3 class="completion-subtitle">SMART INDIA HACKATHON 2026</h3>
+          <p class="completion-desc">24 HOURS OF INNOVATION COMPLETE</p>
+          <div class="completion-college">
+            Vel Tech High Tech Dr. Rangarajan Dr. Sakunthala Engineering College
+          </div>
+          <div class="completion-actions">
+            <button id="relaunchBtn" class="control-btn control-btn-primary">
+              <i class="fa-solid fa-rotate"></i> RE-OPEN COUNTDOWN
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Event Information Footer Card -->
+    <footer class="event-info-section" id="eventInfoSection">
+      <div class="info-grid">
+        
+        <div class="info-card">
+          <div class="info-icon"><i class="fa-solid fa-building-columns"></i></div>
+          <div class="info-text">
+            <div class="info-title">ORGANIZING INSTITUTION</div>
+            <div class="info-value">Vel Tech High Tech Dr. Rangarajan Dr. Sakunthala Engineering College</div>
+          </div>
+        </div>
+
+        <div class="info-card">
+          <div class="info-icon"><i class="fa-solid fa-microchip"></i></div>
+          <div class="info-text">
+            <div class="info-title">EVENT FOCUS</div>
+            <div class="info-value">Smart India Hackathon 2026 – Internal Hackathon</div>
+          </div>
+        </div>
+
+        <div class="info-card">
+          <div class="info-icon"><i class="fa-solid fa-stopwatch"></i></div>
+          <div class="info-text">
+            <div class="info-title">DURATION</div>
+            <div class="info-value">24 Hours Continuous Innovation</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="event-footer-note">
+        <span><i class="fa-solid fa-keyboard"></i> Hotkeys: <strong>Space</strong> (Start) • <strong>F</strong> (Event Mode) • <strong>M</strong> (Mute Sound)</span>
+      </div>
+    </footer>
+
+  </main>
+
+  <!-- Live Cinematic Announcement Overlay (Expands over countdown when triggered) -->
+  <div id="announcementOverlay" class="announcement-overlay hidden">
+    <div class="announcement-glass-card" id="annGlassCard">
+      <div class="ann-card-header">
+        <span class="ann-badge" id="annPriorityBadge">NORMAL</span>
+        <div class="ann-time-tag" id="annTimeTag"><i class="fa-solid fa-clock"></i> <span id="annTimeLabel">08:00 AM</span></div>
+      </div>
+
+      <h2 class="ann-title" id="annHeading">BREAKFAST IS NOW AVAILABLE</h2>
+      
+      <p class="ann-details" id="annDetails">
+        Breakfast is now available at the dining hall. Participants may proceed in an orderly manner.
+      </p>
+
+      <div class="ann-card-footer">
+        <div class="ann-progress-bar">
+          <div class="ann-progress-fill" id="annProgressFill" style="width: 100%;"></div>
+        </div>
+        <span class="ann-timer-text" id="annTimerText"><i class="fa-solid fa-hourglass-half"></i> Auto-dismissing in 60s</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Public Reset Modal -->
+  <div id="publicResetModal" class="admin-modal-overlay hidden">
+    <div class="admin-modal-card">
+      <div class="modal-header">
+        <i class="fa-solid fa-lock modal-icon-warning"></i>
+        <h3>Reset Countdown?</h3>
+      </div>
+      <div class="modal-body">
+        <p>Resetting the official event countdown requires Administrator authorization.</p>
+        <p style="margin-top: 0.5rem; opacity: 0.85;">Unauthorized visitors cannot modify the official event timer.</p>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelPublicResetBtn" class="admin-btn admin-btn-subtle">CANCEL</button>
+        <a href="/admin/login" class="admin-btn admin-btn-primary">ADMIN LOGIN</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Current Date & Time Indicator (Bottom-Right) -->
+  <div id="liveClockWidget" class="live-clock-widget">
+    <i class="fa-regular fa-clock clock-icon"></i>
+    <span id="liveClockText">09 Sep 2026 • 05:39 PM</span>
+  </div>
+
+  <!-- Modular Scripts -->
+  <script src="/audio.js"></script>
+  <script src="/background.js"></script>
+  <script src="/fx.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

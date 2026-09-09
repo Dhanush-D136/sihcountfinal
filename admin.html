@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIH 2026 Admin Control Panel | Vel Tech High Tech</title>
+  <meta name="robots" content="noindex, nofollow">
+  
+  <base href="/">
+  
+  <!-- Premium Fonts from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sora:wght@400;600;700;800&family=Space+Grotesk:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Core Stylesheet -->
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/admin.css">
+</head>
+<body class="admin-body">
+
+  <!-- Canvas Layers for Dynamic Background -->
+  <canvas id="bgCanvas" class="fx-canvas-bg"></canvas>
+
+  <!-- Main Container -->
+  <div class="admin-wrapper" id="adminWrapper">
+
+    <!-- 1. UNAUTHENTICATED ADMIN LOGIN VIEW -->
+    <div class="admin-login-view" id="adminLoginView">
+      
+      <!-- Top Branding Container -->
+      <div class="admin-branding">
+        <div class="branding-bar">
+          <div class="logo-box">
+            <img src="/Vel_Tech_Logo_Clean.png" alt="Vel Tech Logo" class="brand-logo veltech-img">
+          </div>
+          <div class="branding-divider">
+            <div class="divider-line"></div>
+            <div class="divider-gem"></div>
+            <div class="divider-line"></div>
+          </div>
+          <div class="logo-box">
+            <img src="/SIH_Logo_Clean.png" alt="SIH 2026 Logo" class="brand-logo sih-img">
+          </div>
+        </div>
+
+        <div class="college-info-block">
+          <h2 class="college-title-main">Vel Tech High Tech</h2>
+          <h3 class="college-title-sub">Dr. Rangarajan Dr. Sakunthala Engineering College</h3>
+          <h4 class="college-title-tag">An Autonomous Institution</h4>
+        </div>
+      </div>
+
+      <!-- Glassmorphism Login Card -->
+      <div class="admin-login-card">
+        <div class="login-card-header">
+          <div class="admin-shield-icon">
+            <i class="fa-solid fa-user-shield"></i>
+          </div>
+          <h1 class="login-card-title">SIH 2026 ADMIN CONTROL</h1>
+          <p class="login-card-subtitle">Authorized administrator access only</p>
+        </div>
+
+        <!-- Alert Error Banner -->
+        <div id="loginErrorAlert" class="admin-alert admin-alert-danger hidden">
+          <i class="fa-solid fa-circle-exclamation"></i>
+          <span id="loginErrorMessage">Invalid administrator username or password.</span>
+        </div>
+
+        <!-- Login Form -->
+        <form id="adminLoginForm" class="admin-login-form" autocomplete="off">
+          <div class="form-group">
+            <label for="adminUsername" class="form-label">
+              <i class="fa-solid fa-user"></i> Administrator Username
+            </label>
+            <input 
+              type="text" 
+              id="adminUsername" 
+              class="form-input" 
+              placeholder="Enter administrator username" 
+              required
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="adminPassword" class="form-label">
+              <i class="fa-solid fa-key"></i> Administrator Password
+            </label>
+            <div class="password-input-wrapper">
+              <input 
+                type="password" 
+                id="adminPassword" 
+                class="form-input" 
+                placeholder="Enter password" 
+                required
+              >
+              <button type="button" id="togglePasswordBtn" class="password-toggle-btn" title="Toggle password visibility">
+                <i class="fa-solid fa-eye" id="passwordEyeIcon"></i>
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" id="loginSubmitBtn" class="admin-btn admin-btn-primary">
+            <i class="fa-solid fa-lock"></i>
+            <span id="loginBtnText">ADMIN LOGIN</span>
+          </button>
+        </form>
+
+        <div class="login-card-footer">
+          <a href="/" class="back-link"><i class="fa-solid fa-arrow-left"></i> Return to Public Countdown Page</a>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- 2. AUTHENTICATED ADMIN CONTROL DASHBOARD VIEW -->
+    <div class="admin-dashboard-view hidden" id="adminDashboardView">
+      
+      <!-- Top Control Navigation Bar -->
+      <div class="admin-nav-bar">
+        <div class="admin-nav-left">
+          <span class="status-badge status-badge-authenticated">
+            <i class="fa-solid fa-user-check"></i>
+            <span>AUTHORIZED: <strong id="adminUsernameDisplay">Vel Tech SIH</strong></span>
+          </span>
+        </div>
+        <div class="admin-nav-right">
+          <a href="/" target="_blank" class="control-btn control-btn-subtle" title="View Public Countdown Site">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> Public Page
+          </a>
+          <button id="adminLogoutBtn" class="control-btn control-btn-danger">
+            <i class="fa-solid fa-right-from-bracket"></i> LOG OUT
+          </button>
+        </div>
+      </div>
+
+      <!-- Dashboard Container -->
+      <div class="dashboard-container">
+        
+        <!-- Header Branding Banner -->
+        <div class="dashboard-header">
+          <h1 class="dashboard-title">
+            <span class="title-primary">SMART INDIA HACKATHON 2026</span>
+            <span class="title-sub">ADMINISTRATOR CONTROL DASHBOARD</span>
+          </h1>
+          <p class="dashboard-college">Vel Tech High Tech Dr. Rangarajan Dr. Sakunthala Engineering College</p>
+        </div>
+
+        <!-- Master State Grid -->
+        <div class="dashboard-grid">
+          
+          <!-- Live Event Status Card -->
+          <div class="admin-card event-status-card">
+            <div class="card-header">
+              <h2 class="card-title"><i class="fa-solid fa-server"></i> Server Event State</h2>
+              <span class="status-indicator-pill" id="dashboardStatusPill">NOT STARTED</span>
+            </div>
+            
+            <div class="card-body">
+              <!-- Big Digital Preview -->
+              <div class="admin-timer-display">
+                <span class="admin-digit" id="adminDigitHours">24</span>
+                <span class="admin-colon">:</span>
+                <span class="admin-digit" id="adminDigitMinutes">00</span>
+                <span class="admin-colon">:</span>
+                <span class="admin-digit" id="adminDigitSeconds">00</span>
+              </div>
+
+              <div class="admin-progress-container">
+                <div class="progress-info">
+                  <span>Server Elapsed Progress</span>
+                  <span id="adminProgressPercent">0.0%</span>
+                </div>
+                <div class="progress-track">
+                  <div class="progress-fill" id="adminProgressFill" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <div class="admin-meta-grid">
+                <div class="meta-item">
+                  <span class="meta-label">Server Start Timestamp</span>
+                  <span class="meta-value" id="metaStartTime">--:--:--</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">Target Finish Timestamp</span>
+                  <span class="meta-value" id="metaTargetTime">--:--:--</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">Authoritative Server Time</span>
+                  <span class="meta-value" id="metaServerTime">--:--:--</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Event Control Actions Panel -->
+          <div class="admin-card event-actions-card">
+            <div class="card-header">
+              <h2 class="card-title"><i class="fa-solid fa-sliders"></i> Master Event Controls</h2>
+            </div>
+            <div class="card-body">
+              <div class="actions-grid">
+                <button id="adminStartBtn" class="action-btn action-btn-start">
+                  <i class="fa-solid fa-bolt"></i>
+                  <div class="btn-text-wrapper">
+                    <span class="action-btn-main">START HACKATHON</span>
+                    <span class="action-btn-sub">Initiate 24-hour server timer</span>
+                  </div>
+                </button>
+
+                <button id="adminPauseBtn" class="action-btn action-btn-pause" disabled>
+                  <i class="fa-solid fa-pause"></i>
+                  <div class="btn-text-wrapper">
+                    <span class="action-btn-main">PAUSE COUNTDOWN</span>
+                    <span class="action-btn-sub">Freeze timer for all visitors</span>
+                  </div>
+                </button>
+
+                <button id="adminResumeBtn" class="action-btn action-btn-resume" disabled>
+                  <i class="fa-solid fa-play"></i>
+                  <div class="btn-text-wrapper">
+                    <span class="action-btn-main">RESUME COUNTDOWN</span>
+                    <span class="action-btn-sub">Unfreeze paused countdown</span>
+                  </div>
+                </button>
+
+                <button id="adminResetBtn" class="action-btn action-btn-reset">
+                  <i class="fa-solid fa-rotate-left"></i>
+                  <div class="btn-text-wrapper">
+                    <span class="action-btn-main">RESET COUNTDOWN</span>
+                    <span class="action-btn-sub">Reset to Pre-Launch state</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          <!-- Edit Remaining Time Card -->
+          <div class="admin-card edit-timer-card">
+            <div class="card-header">
+              <h2 class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Edit Authoritative Timer</h2>
+            </div>
+            <div class="card-body">
+              <form id="editTimerForm" class="edit-timer-form">
+                <div class="timer-inputs-grid">
+                  <div class="form-group">
+                    <label class="form-label">Hours</label>
+                    <input type="number" id="editHours" min="0" max="99" value="24" class="form-input">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Minutes</label>
+                    <input type="number" id="editMinutes" min="0" max="59" value="00" class="form-input">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Seconds</label>
+                    <input type="number" id="editSeconds" min="0" max="59" value="00" class="form-input">
+                  </div>
+                </div>
+                <div class="timer-preset-btns">
+                  <button type="button" class="preset-btn" data-h="24" data-m="0" data-s="0">24:00:00</button>
+                  <button type="button" class="preset-btn" data-h="18" data-m="0" data-s="0">18:00:00</button>
+                  <button type="button" class="preset-btn" data-h="12" data-m="30" data-s="0">12:30:00</button>
+                  <button type="button" class="preset-btn" data-h="6" data-m="0" data-s="0">06:00:00</button>
+                </div>
+                <button type="submit" class="admin-btn admin-btn-primary w-full">
+                  <i class="fa-solid fa-check"></i> UPDATE TIMER FOR ALL DISPLAYS
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Create Event Announcement Card -->
+          <div class="admin-card announcement-create-card full-width">
+            <div class="card-header">
+              <h2 class="card-title"><i class="fa-solid fa-bullhorn"></i> Live Event Announcement Control</h2>
+            </div>
+            <div class="card-body">
+              <!-- Quick Presets -->
+              <div class="preset-pills-bar">
+                <span class="preset-label">Quick Presets:</span>
+                <button type="button" class="ann-preset-btn" data-head="BREAKFAST" data-time="08:00 AM" data-det="Breakfast is now available at the dining hall. Participants may proceed in an orderly manner.">BREAKFAST</button>
+                <button type="button" class="ann-preset-btn" data-head="LUNCH" data-time="01:00 PM" data-det="Lunch is now served. Please visit the main dining hall.">LUNCH</button>
+                <button type="button" class="ann-preset-btn" data-head="ROUND 2 STARTS" data-time="10:00 AM" data-det="Round 2 evaluation begins now. All teams must report to their assigned stalls.">ROUND 2</button>
+                <button type="button" class="ann-preset-btn" data-head="FINAL SUBMISSION" data-time="04:30 PM" data-det="All teams must complete project uploads before the deadline.">SUBMISSION</button>
+                <button type="button" class="ann-preset-btn" data-head="JUDGING ROUND" data-time="05:00 PM" data-det="Jury members are arriving. Keep project demos ready.">JUDGING</button>
+              </div>
+
+              <form id="announcementForm" class="announcement-form">
+                <div class="form-row-grid">
+                  <div class="form-group">
+                    <label class="form-label">Heading</label>
+                    <input type="text" id="annFormHeading" class="form-input" placeholder="e.g. BREAKFAST" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Time Label</label>
+                    <input type="text" id="annFormTime" class="form-input" placeholder="e.g. 08:00 AM">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Details / Instructions</label>
+                  <textarea id="annFormDetails" class="form-input form-textarea" rows="3" placeholder="Enter full announcement details for participant displays..." required></textarea>
+                </div>
+
+                <div class="form-row-grid">
+                  <div class="form-group">
+                    <label class="form-label">Duration</label>
+                    <select id="annFormDuration" class="form-input">
+                      <option value="15">15 Seconds</option>
+                      <option value="30">30 Seconds</option>
+                      <option value="60" selected>60 Seconds (Default)</option>
+                      <option value="90">90 Seconds</option>
+                      <option value="120">120 Seconds</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Priority Level</label>
+                    <select id="annFormPriority" class="form-input">
+                      <option value="NORMAL" selected>NORMAL (Cyan)</option>
+                      <option value="IMPORTANT">IMPORTANT (Gold)</option>
+                      <option value="URGENT">URGENT (Red Pulse)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-action-bar">
+                  <button type="button" id="triggerNowBtn" class="admin-btn admin-btn-primary">
+                    <i class="fa-solid fa-paper-plane"></i> DISPLAY ANNOUNCEMENT NOW
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+        <!-- Audit Log History Section -->
+        <div class="admin-card audit-log-card">
+          <div class="card-header">
+            <h2 class="card-title"><i class="fa-solid fa-clipboard-list"></i> Server Security Audit Log</h2>
+            <button id="refreshAuditBtn" class="control-btn control-btn-subtle"><i class="fa-solid fa-rotate"></i> Refresh Logs</button>
+          </div>
+          <div class="card-body">
+            <div class="audit-table-wrapper">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Action</th>
+                    <th>Administrator</th>
+                    <th>Details</th>
+                    <th>IP Address</th>
+                  </tr>
+                </thead>
+                <tbody id="auditLogTableBody">
+                  <tr><td colspan="5" class="text-center">Loading audit logs...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Protected Confirmation Modal for Reset -->
+  <div id="resetConfirmModal" class="admin-modal-overlay hidden">
+    <div class="admin-modal-card">
+      <div class="modal-header">
+        <i class="fa-solid fa-triangle-exclamation modal-icon-warning"></i>
+        <h3>Reset 24-Hour Hackathon Countdown?</h3>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to reset the official event state? This action will set the server countdown back to <strong>Pre-Launch</strong> for all connected clients and visitors across all devices.</p>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelResetBtn" class="admin-btn admin-btn-subtle">CANCEL</button>
+        <button id="confirmResetBtn" class="admin-btn admin-btn-danger">RESET COUNTDOWN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modular Scripts -->
+  <script src="/background.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>
