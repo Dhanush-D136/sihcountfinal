@@ -7,7 +7,7 @@
   'use strict';
 
   let audioCtx = null;
-  let isMuted = true;
+  let isMuted = false;
   let launchAudioBuffer = null;
 
   function getAudioContext() {
@@ -35,8 +35,12 @@
       const saved = localStorage.getItem('SIH_2026_SOUND_MUTED');
       if (saved !== null) {
         isMuted = saved === 'true';
+      } else {
+        isMuted = false;
       }
-    } catch (e) {}
+    } catch (e) {
+      isMuted = false;
+    }
     return isMuted;
   }
 
@@ -269,13 +273,13 @@
 
   // ==========================================================================
   // CENTRAL AUDIO MANIFEST & PRELOADED AUDIO REGISTRY
-  // Pre-created HTMLAudioElement objects for zero-latency instant playback
   // ==========================================================================
   const audioRegistry = {}; // filename -> HTMLAudioElement
   const NOTIFICATION_AUDIO_MANIFEST = {};
   let currentAnnouncementAudio = null;
   let activeAudioFilename = null;
   let fadeInterval = null;
+  let announcementStopTimeout = null;
   let previewAudioInstance = null;
 
   function preloadAudioFile(filename) {
@@ -289,7 +293,7 @@
 
       const audio = new Audio(audioUrl);
       audio.preload = 'auto';
-      audio.load(); // Immediately instruct browser to download & decode audio header/bytes
+      audio.load();
 
       audioRegistry[filename] = audio;
       console.log(`[AUDIO ENGINE] Cached & preloaded track: ${filename}`);
@@ -323,7 +327,7 @@
           }
         });
       }
-      console.log(`[AUDIO ENGINE] Preload complete in ${(performance.now() - tStart).toFixed(2)}ms. Total cached tracks: ${Object.keys(audioRegistry).length}`);
+      console.log(`[AUDIO ENGINE] Preload complete in ${(performance.now() - tStart).toFixed(2)}ms.`);
     } catch (e) {
       console.warn('[AUDIO ENGINE] Error during background music preloading:', e);
     }
@@ -338,38 +342,64 @@
     return 0;
   }
 
-  function playAnnouncementMusic(filename, loop = false, seekSeconds = 0, onEndedCallback = null) {
-    const tStart = performance.now();
-    console.log(`[PERF DIAGNOSTIC] announcement_received: 0.00ms`);
+  function stopAnnouncementMusic(fadeSeconds = 0) {
+    if (fadeInterval) {
+      clearInterval(fadeInterval);
+      fadeInterval = null;
+    }
+    if (announcementStopTimeout) {
+      clearTimeout(announcementStopTimeout);
+      announcementStopTimeout = null;
+    }
+
+    const audioToStop = currentAnnouncementAudio;
+    currentAnnouncementAudio = null;
+    activeAudioFilename = null;
+
+    if (audioToStop) {
+      try {
+        audioToStop.pause();
+        audioToStop.currentTime = 0;
+        audioToStop.src = '';
+      } catch (e) {}
+    }
+
+    Object.values(audioRegistry).forEach(a => {
+      try {
+        a.pause();
+        a.currentTime = 0;
+      } catch (e) {}
+    });
+  }
+
+  function playAnnouncementMusic(filename, loop = false, seekSeconds = 0, durationSeconds = 0, onEndedCallback = null) {
+    console.log(`[AUDIO ENGINE] Play requested: ${filename}, seek: ${seekSeconds}s, duration: ${durationSeconds}s`);
+
+    // Kill any existing playback immediately
+    stopAnnouncementMusic(0);
 
     if (isMuted) {
-      console.log(`[PERF DIAGNOSTIC] audio_play_attempt: skipped (Sound OFF)`);
+      console.log(`[AUDIO ENGINE] Audio play skipped (Sound is MUTED)`);
       return;
     }
 
     if (!filename || filename === '' || filename === 'none') {
-      console.log(`[PERF DIAGNOSTIC] audio_play_attempt: skipped (None - No Sound selected)`);
-      stopAnnouncementMusic(0);
+      console.log(`[AUDIO ENGINE] Audio play skipped (None - No Sound selected)`);
       return;
     }
 
-    // Stop current track if switching tracks
-    if (currentAnnouncementAudio && activeAudioFilename !== filename) {
-      stopAnnouncementMusic(0);
-    }
-
-    let audio = audioRegistry[filename];
-    if (!audio) {
-      console.log(`[AUDIO ENGINE] Cache miss for ${filename}, preloading dynamically...`);
-      audio = preloadAudioFile(filename);
-    }
-
-    if (!audio) {
-      console.warn(`[AUDIO ENGINE] Audio object unavailable for ${filename}`);
+    if (durationSeconds > 0 && seekSeconds >= durationSeconds) {
+      console.log(`[AUDIO ENGINE] Audio play skipped (Expired on server timeline)`);
       return;
     }
 
-    console.log(`[PERF DIAGNOSTIC] audio_object_ready: ${(performance.now() - tStart).toFixed(2)}ms (pre-cached)`);
+    const encodedFilename = encodeURIComponent(filename);
+    const DEFAULT_RENDER_URL = 'https://sihcountdownveltech.onrender.com';
+    const API_BASE_URL = window.API_BASE_URL ||
+      (window.location.hostname.includes('vercel.app') ? DEFAULT_RENDER_URL : '');
+    const audioUrl = `${API_BASE_URL}/Music/${encodedFilename}`;
+    
+    const audio = new Audio(audioUrl);
 
     currentAnnouncementAudio = audio;
     activeAudioFilename = filename;
@@ -377,37 +407,48 @@
     audio.loop = !!loop;
     audio.volume = 1.0;
 
-    // Apply synchronized seek offset derived from server timestamp
     if (seekSeconds > 0) {
-      try {
-        if (audio.duration && seekSeconds < audio.duration) {
-          audio.currentTime = seekSeconds;
-        } else if (!audio.duration) {
-          audio.currentTime = seekSeconds;
-        }
-      } catch (e) {
-        console.warn('[AUDIO ENGINE] Seek error:', e);
+      const applySeek = () => {
+        try {
+          if (audio.duration && seekSeconds < audio.duration) {
+            audio.currentTime = seekSeconds;
+          } else if (!audio.duration) {
+            audio.currentTime = seekSeconds;
+          }
+        } catch (e) {}
+      };
+      if (audio.readyState >= 1) {
+        applySeek();
+      } else {
+        audio.addEventListener('loadedmetadata', applySeek, { once: true });
       }
-    } else {
-      try {
-        audio.currentTime = 0;
-      } catch (e) {}
     }
 
     if (onEndedCallback) {
       audio.onended = onEndedCallback;
     }
 
-    console.log(`[PERF DIAGNOSTIC] audio_play_attempt: ${(performance.now() - tStart).toFixed(2)}ms`);
+    // Hard End Safety Timeout
+    if (durationSeconds > 0) {
+      const remainingMs = Math.max(0, (durationSeconds - seekSeconds) * 1000);
+      announcementStopTimeout = setTimeout(() => {
+        console.log(`[AUDIO ENGINE] Hard end safety timeout fired for ${filename}`);
+        stopAnnouncementMusic(0);
+      }, remainingMs);
+    }
 
-    // Call play() immediately without awaiting network load or canplaythrough
     const playPromise = audio.play();
     if (playPromise !== undefined) {
       playPromise.then(() => {
-        console.log(`[PERF DIAGNOSTIC] audio_play_started: ${(performance.now() - tStart).toFixed(2)}ms`);
+        console.log(`[AUDIO ENGINE] Audio playing: ${filename}`);
+        if (currentAnnouncementAudio !== audio) {
+          console.log(`[AUDIO ENGINE] Announcement ended while audio promise resolved. Stopping immediately.`);
+          audio.pause();
+          audio.currentTime = 0;
+          audio.src = '';
+        }
       }).catch(err => {
-        console.warn('[AUDIO ENGINE] Announcement music playback blocked by browser policy:', err);
-        // Fallback user interaction resume listener
+        console.warn('[AUDIO ENGINE] Audio playback blocked by browser policy:', err);
         const resumeOnInteraction = () => {
           if (currentAnnouncementAudio === audio && audio.paused) {
             audio.play().catch(() => {});
@@ -418,51 +459,6 @@
         window.addEventListener('pointerdown', resumeOnInteraction, { once: true });
         window.addEventListener('keydown', resumeOnInteraction, { once: true });
       });
-    }
-  }
-
-  function stopAnnouncementMusic(fadeSeconds = 0.8) {
-    if (fadeInterval) {
-      clearInterval(fadeInterval);
-      fadeInterval = null;
-    }
-
-    if (!currentAnnouncementAudio) {
-      activeAudioFilename = null;
-      return;
-    }
-
-    const audioToStop = currentAnnouncementAudio;
-    currentAnnouncementAudio = null;
-    activeAudioFilename = null;
-
-    if (fadeSeconds > 0 && !audioToStop.paused && audioToStop.volume > 0.05) {
-      const fadeSteps = 16;
-      const intervalMs = (fadeSeconds * 1000) / fadeSteps;
-      const volStep = audioToStop.volume / fadeSteps;
-
-      fadeInterval = setInterval(() => {
-        try {
-          if (audioToStop.volume > volStep) {
-            audioToStop.volume = Math.max(0, audioToStop.volume - volStep);
-          } else {
-            clearInterval(fadeInterval);
-            fadeInterval = null;
-            audioToStop.pause();
-            audioToStop.currentTime = 0;
-            audioToStop.volume = 1.0;
-          }
-        } catch (e) {
-          clearInterval(fadeInterval);
-          fadeInterval = null;
-        }
-      }, intervalMs);
-    } else {
-      try {
-        audioToStop.pause();
-        audioToStop.currentTime = 0;
-        audioToStop.volume = 1.0;
-      } catch (e) {}
     }
   }
 

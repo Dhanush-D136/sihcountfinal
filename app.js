@@ -240,9 +240,9 @@
   // 8. Handle Live Announcement Overlay Display (High precision continuous rendering)
   function handleAnnouncementOverlay(ann) {
     if (!ann) {
-      if (lastAnnId !== null) {
+      if (lastAnnId !== null || !announcementOverlay.classList.contains('hidden')) {
         announcementOverlay.classList.add('hidden');
-        window.AudioEngine.stopAnnouncementMusic(0.8);
+        window.AudioEngine.stopAnnouncementMusic(0);
         lastAnnId = null;
       }
       return;
@@ -250,12 +250,14 @@
 
     const nowClientSeconds = Date.now() / 1000;
     const nowServerSeconds = nowClientSeconds + serverClockOffset;
-    const elapsedSeconds = Math.max(0, nowServerSeconds - (ann.displayed_timestamp || nowServerSeconds));
+    const startedAt = ann.started_at || ann.displayed_timestamp || nowServerSeconds;
+    const elapsedSeconds = Math.max(0, nowServerSeconds - startedAt);
+    const audioId = ann.audio_id || ann.audio_file;
     
     // Determine effective duration: for 'until_song_complete', retrieve preloaded audio duration if available
     let duration = ann.duration_seconds || 60;
-    if (ann.until_song_complete && ann.audio_file && ann.audio_file !== 'none') {
-      const trackDuration = window.AudioEngine.getAudioDuration(ann.audio_file);
+    if (ann.until_song_complete && audioId && audioId !== 'none') {
+      const trackDuration = window.AudioEngine.getAudioDuration(audioId);
       if (trackDuration > 0) {
         duration = Math.ceil(trackDuration);
       }
@@ -264,18 +266,19 @@
     const remainingSecondsFloat = Math.max(0, duration - elapsedSeconds);
     const remainingSecondsInt = Math.ceil(remainingSecondsFloat);
 
-    if (remainingSecondsFloat <= 0 && !ann.until_song_complete) {
+    // Hard End Check: Stop audio and hide announcement overlay IMMEDIATELY when duration expires
+    if (remainingSecondsFloat <= 0) {
       announcementOverlay.classList.add('hidden');
-      window.AudioEngine.stopAnnouncementMusic(0.8);
+      window.AudioEngine.stopAnnouncementMusic(0);
       lastAnnId = null;
       return;
     }
 
     annPriorityBadge.textContent = ann.priority || 'NORMAL';
     annPriorityBadge.className = 'ann-badge ' + (ann.priority || 'NORMAL');
-    annTimeLabel.textContent = ann.time_label || formatTimeOfDay(ann.displayed_timestamp);
-    annHeading.textContent = ann.heading;
-    annDetails.textContent = ann.details;
+    annTimeLabel.textContent = ann.time_label || formatTimeOfDay(startedAt);
+    annHeading.textContent = ann.heading || '';
+    annDetails.textContent = ann.message || ann.details || '';
 
     // Smooth transform scaling derived strictly from server timestamp (Right to Left: 1.0 -> 0.0)
     const progressRatio = Math.max(0, Math.min(1, remainingSecondsFloat / duration));
@@ -290,28 +293,25 @@
     // Show visual overlay immediately (<10ms)
     announcementOverlay.classList.remove('hidden');
 
-    // Smooth fade out when 1 second remains
-    if (remainingSecondsFloat <= 1.0 && !ann.until_song_complete) {
-      window.AudioEngine.stopAnnouncementMusic(0.8);
-    }
-
     // Trigger Audio & Chime only once when a new announcement ID arrives
     if (lastAnnId !== ann.id) {
+      window.AudioEngine.stopAnnouncementMusic(0);
       lastAnnId = ann.id;
 
       const tOverlay = performance.now();
-      console.log(`[PERF DIAGNOSTIC] OVERLAY START: ${tOverlay.toFixed(2)}ms`);
-      console.log(`[PERF DIAGNOSTIC] announcement_progress_start: 0.00ms`);
+      console.log(`[PERF DIAGNOSTIC] ANNOUNCEMENT START: ${ann.id} heading: ${ann.heading}`);
+      console.log(`[PERF DIAGNOSTIC] ANNOUNCEMENT DURATION: ${duration}s, ELAPSED: ${elapsedSeconds.toFixed(2)}s`);
       
-      // Explicit Audio Check: Only play audio if audio_file is specified and sound_enabled is true
-      if (ann.sound_enabled && ann.audio_file && ann.audio_file !== '' && ann.audio_file !== 'none') {
+      // Explicit Audio Check: Only play audio if audioId is specified and sound_enabled is true
+      if (ann.sound_enabled && audioId && audioId !== '' && audioId !== 'none') {
         window.AudioEngine.playAnnouncementChime(ann.priority);
 
         const seekOffset = Math.max(0, elapsedSeconds);
         window.AudioEngine.playAnnouncementMusic(
-          ann.audio_file,
+          audioId,
           ann.loop_audio,
           seekOffset,
+          duration,
           () => {
             if (ann.until_song_complete) {
               announcementOverlay.classList.add('hidden');
@@ -531,6 +531,20 @@
       } else if (e.code === 'KeyM') {
         e.preventDefault();
         toggleSound();
+      }
+    });
+
+    // Cleanup audio on tab unload or hidden state
+    const cleanupAudio = () => {
+      window.AudioEngine.stopAnnouncementMusic(0);
+    };
+    window.addEventListener('beforeunload', cleanupAudio);
+    window.addEventListener('pagehide', cleanupAudio);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        cleanupAudio();
+      } else {
+        tickTimerLoop();
       }
     });
   }

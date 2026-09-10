@@ -10,9 +10,30 @@ import sqlite3
 import hashlib
 import secrets
 import threading
+import queue
 from functools import wraps
 from flask import Flask, request, jsonify, send_from_directory, make_response, Response
 from flask_cors import CORS
+
+# Thread-safe SSE Subscribers Broadcast Registry
+sse_subscribers_lock = threading.Lock()
+sse_subscribers = set()
+
+def notify_sse_clients():
+    state = calculate_event_state()
+    if not state:
+        return
+    payload = f"data: {json.dumps(state)}\n\n"
+    with sse_subscribers_lock:
+        to_remove = set()
+        for q in sse_subscribers:
+            try:
+                q.put_nowait(payload)
+            except Exception:
+                to_remove.add(q)
+        for q in to_remove:
+            sse_subscribers.discard(q)
+
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
@@ -288,10 +309,13 @@ def calculate_event_state():
             return None
         
         now = time.time()
+        row_dict = dict(row) if hasattr(row, 'keys') or isinstance(row, dict) else {}
         status = row['status']
         duration = row['duration_seconds']
         start_ts = row['start_timestamp']
+        pause_ts = row_dict.get('pause_timestamp')
         paused_rem = row['remaining_seconds_when_paused']
+        updated_at = row_dict.get('updated_at', now)
         
         remaining_seconds = duration
         elapsed_seconds = 0
@@ -310,6 +334,8 @@ def calculate_event_state():
         elif status == 'PAUSED' and paused_rem is not None:
             remaining_seconds = paused_rem
             elapsed_seconds = duration - remaining_seconds
+            if start_ts:
+                target_timestamp = start_ts + duration
         elif status == 'COMPLETED':
             remaining_seconds = 0
             elapsed_seconds = duration
@@ -325,18 +351,42 @@ def calculate_event_state():
         active_announcement = None
         if active_ann_row:
             active_ann = dict(active_ann_row)
-            active_ann['remaining_duration'] = max(0, int((active_ann['displayed_timestamp'] + active_ann['duration_seconds']) - now))
-            active_announcement = active_ann
+            disp_ts = active_ann.get('displayed_timestamp') or now
+            dur_sec = active_ann.get('duration_seconds', 60)
+            audio_file = active_ann.get('audio_file')
+            
+            active_announcement = {
+                'id': str(active_ann['id']),
+                'heading': active_ann['heading'],
+                'message': active_ann.get('details', ''),
+                'details': active_ann.get('details', ''),
+                'time_label': active_ann.get('time_label') or '',
+                'audio_id': audio_file if (audio_file and audio_file != 'none') else None,
+                'audio_file': audio_file,
+                'started_at': round(disp_ts, 3),
+                'displayed_timestamp': round(disp_ts, 3),
+                'duration_seconds': dur_sec,
+                'priority': active_ann.get('priority', 'NORMAL'),
+                'sound_enabled': bool(active_ann.get('sound_enabled', 1)),
+                'loop_audio': bool(active_ann.get('loop_audio', 0)),
+                'until_song_complete': bool(active_ann.get('until_song_complete', 0)),
+                'status': active_ann.get('status', 'ACTIVE'),
+                'remaining_duration': max(0, int((disp_ts + dur_sec) - now))
+            }
 
         return {
             'status': status,
             'server_time': round(now, 3),
             'start_timestamp': round(start_ts, 3) if start_ts else None,
             'target_timestamp': round(target_timestamp, 3) if target_timestamp else None,
+            'end_timestamp': round(target_timestamp, 3) if target_timestamp else None,
             'duration_seconds': duration,
             'remaining_seconds': remaining_seconds,
             'elapsed_seconds': elapsed_seconds,
             'progress_percent': progress_percent,
+            'paused_at': round(pause_ts, 3) if pause_ts else None,
+            'remaining_when_paused': paused_rem,
+            'updated_at': round(updated_at, 3) if updated_at else round(now, 3),
             'active_announcement': active_announcement
         }
 
@@ -345,6 +395,7 @@ def scheduled_announcement_worker():
     while True:
         try:
             now = time.time()
+            state_changed = False
             with get_db() as conn:
                 cursor = conn.cursor()
                 
@@ -360,16 +411,29 @@ def scheduled_announcement_worker():
                         WHERE id = ?
                     ''', (now, row['id']))
                     log_audit('AUTO_TRIGGERED_ANNOUNCEMENT', 'SCHEDULER', f'Announcement ID {row["id"]} triggered automatically')
+                    state_changed = True
                 
                 cursor.execute('''
-                    UPDATE announcements 
-                    SET status = 'DISPLAYED' 
+                    SELECT id FROM announcements 
                     WHERE status = 'ACTIVE' AND (displayed_timestamp + duration_seconds) <= ?
                 ''', (now,))
+                expired_rows = cursor.fetchall()
+                if expired_rows:
+                    cursor.execute('''
+                        UPDATE announcements 
+                        SET status = 'DISPLAYED' 
+                        WHERE status = 'ACTIVE' AND (displayed_timestamp + duration_seconds) <= ?
+                    ''', (now,))
+                    state_changed = True
+
                 conn.commit()
+            
+            if state_changed:
+                notify_sse_clients()
         except Exception as e:
             print('Scheduler worker error:', e)
         time.sleep(1)
+
 
 if not os.environ.get('VERCEL'):
     scheduler_thread = threading.Thread(target=scheduled_announcement_worker, daemon=True)
@@ -389,12 +453,12 @@ def get_public_event_status():
     state = calculate_event_state()
     return jsonify(state), 200
 
-# Public Start Endpoint: Allows initiating the event from NOT_STARTED without requiring a password!
+# Public & Admin Start Endpoint
+@app.route('/api/events/start', methods=['POST'])
 @app.route('/api/event/public_start', methods=['POST'])
 def public_start_event():
     state = calculate_event_state()
     if state['status'] != 'NOT_STARTED':
-        # Already started/running/paused - return current authoritative state
         return jsonify({'success': False, 'message': 'Event countdown is already active', 'event': state}), 200
 
     now = time.time()
@@ -406,7 +470,8 @@ def public_start_event():
         ''', (now, now))
         conn.commit()
 
-    log_audit('PUBLIC_EVENT_START', 'PUBLIC_LAUNCH', '24-Hour Countdown Started from Public Interface', request.remote_addr or '')
+    log_audit('PUBLIC_EVENT_START', 'PUBLIC_LAUNCH', '24-Hour Countdown Started from Interface', request.remote_addr or '')
+    notify_sse_clients()
     return jsonify({'success': True, 'event': calculate_event_state()}), 200
 
 @app.route('/api/announcements/active', methods=['GET'])
@@ -414,7 +479,7 @@ def get_active_announcements():
     state = calculate_event_state()
     return jsonify({'active_announcement': state.get('active_announcement')}), 200
 
-# Reject public write attempts on protected endpoints
+# Reject public write attempts on protected status endpoint
 @app.route('/api/event/status', methods=['PUT', 'DELETE', 'PATCH'])
 def reject_public_writes():
     return jsonify({'error': 'Method Not Allowed: Public state modifications are restricted. Use /api/admin/ endpoints'}), 405
@@ -422,22 +487,41 @@ def reject_public_writes():
 # Real-Time SSE Stream for Instant Push Updates
 @app.route('/api/events/stream')
 def sse_event_stream():
-    state = calculate_event_state()
     headers = {
         'Cache-Control': 'no-cache',
         'X-Accel-Buffering': 'no',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        'Content-Type': 'text/event-stream'
     }
+    state = calculate_event_state()
     if os.environ.get('VERCEL'):
-        # On serverless platforms like Vercel, return current state without infinite while-loop timeout
         return Response(f"data: {json.dumps(state)}\n\n", mimetype='text/event-stream', headers=headers)
 
+    q = queue.Queue(maxsize=20)
+    with sse_subscribers_lock:
+        sse_subscribers.add(q)
+
+    # Push current authoritative state immediately upon connection
+    try:
+        q.put_nowait(f"data: {json.dumps(state)}\n\n")
+    except Exception:
+        pass
+
     def generate():
-        while True:
-            st = calculate_event_state()
-            yield f"data: {json.dumps(st)}\n\n"
-            time.sleep(1.5)
+        try:
+            while True:
+                try:
+                    msg = q.get(timeout=15.0)
+                    yield msg
+                except queue.Empty:
+                    # Keep-alive SSE comment
+                    yield ": ping\n\n"
+        finally:
+            with sse_subscribers_lock:
+                sse_subscribers.discard(q)
+
     return Response(generate(), mimetype='text/event-stream', headers=headers)
+
 
 # ==========================================================================
 # PROTECTED ADMIN AUTHENTICATION API ENDPOINTS
@@ -529,8 +613,10 @@ def admin_start_event():
         conn.commit()
         
     log_audit('EVENT_START', DEFAULT_ADMIN_USER, 'Authorized 24-Hour Countdown Initiation from Admin Panel', request.remote_addr or '')
+    notify_sse_clients()
     return jsonify({'success': True, 'event': calculate_event_state()}), 200
 
+@app.route('/api/events/pause', methods=['POST'])
 @app.route('/api/admin/event/pause', methods=['POST'])
 @admin_required
 def admin_pause_event():
@@ -550,8 +636,10 @@ def admin_pause_event():
         conn.commit()
         
     log_audit('EVENT_PAUSE', DEFAULT_ADMIN_USER, f'Event paused with {remaining} seconds remaining', request.remote_addr or '')
+    notify_sse_clients()
     return jsonify({'success': True, 'event': calculate_event_state()}), 200
 
+@app.route('/api/events/resume', methods=['POST'])
 @app.route('/api/admin/event/resume', methods=['POST'])
 @admin_required
 def admin_resume_event():
@@ -573,8 +661,10 @@ def admin_resume_event():
         conn.commit()
         
     log_audit('EVENT_RESUME', DEFAULT_ADMIN_USER, 'Event resumed', request.remote_addr or '')
+    notify_sse_clients()
     return jsonify({'success': True, 'event': calculate_event_state()}), 200
 
+@app.route('/api/events/reset', methods=['POST'])
 @app.route('/api/admin/event/reset', methods=['POST'])
 @admin_required
 def admin_reset_event():
@@ -588,8 +678,10 @@ def admin_reset_event():
         conn.commit()
         
     log_audit('EVENT_RESET', DEFAULT_ADMIN_USER, 'Event timer reset to Pre-Launch state', request.remote_addr or '')
+    notify_sse_clients()
     return jsonify({'success': True, 'event': calculate_event_state()}), 200
 
+@app.route('/api/events/update', methods=['POST'])
 @app.route('/api/admin/event/edit_timer', methods=['POST'])
 @admin_required
 def admin_edit_timer():
@@ -624,6 +716,7 @@ def admin_edit_timer():
         conn.commit()
 
     log_audit('EDIT_TIMER', DEFAULT_ADMIN_USER, f'Timer adjusted to {hours:02d}:{minutes:02d}:{seconds:02d}', request.remote_addr or '')
+    notify_sse_clients()
     return jsonify({'success': True, 'event': calculate_event_state()}), 200
 
 # Music Discovery API Endpoint
@@ -662,19 +755,22 @@ def get_music_list():
     return jsonify({'music': music_files}), 200
 
 # Announcements Management Endpoints
+@app.route('/api/announcements', methods=['POST'])
+@app.route('/api/announcements/display', methods=['POST'])
 @app.route('/api/admin/announcements/create', methods=['POST'])
 @admin_required
 def admin_create_announcement():
     data = request.get_json() or {}
     heading = data.get('heading', '').strip()
     time_label = data.get('time_label', '').strip()
-    details = data.get('details', '').strip()
+    details = data.get('details', '') or data.get('message', '')
+    details = details.strip() if isinstance(details, str) else ''
     duration_seconds = int(data.get('duration_seconds', 60))
     priority = data.get('priority', 'NORMAL').upper()
     sound_enabled = 1 if data.get('sound_enabled', True) else 0
-    audio_file_raw = data.get('audio_file')
+    audio_file_raw = data.get('audio_file') or data.get('audio_id')
     audio_file = audio_file_raw.strip() if (audio_file_raw and isinstance(audio_file_raw, str)) else None
-    if not audio_file:
+    if not audio_file or audio_file == 'none':
         audio_file = None
     loop_audio = 1 if data.get('loop_audio', False) else 0
     until_song_complete = 1 if data.get('until_song_complete', False) else 0
@@ -682,7 +778,7 @@ def admin_create_announcement():
     scheduled_ts = data.get('scheduled_timestamp')
 
     if not heading or not details:
-        return jsonify({'error': 'Heading and details are required'}), 400
+        return jsonify({'error': 'Heading and details/message are required'}), 400
 
     if audio_file:
         music_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'Music'))
@@ -696,6 +792,8 @@ def admin_create_announcement():
 
     with get_db() as conn:
         cursor = conn.cursor()
+        if display_now:
+            cursor.execute("UPDATE announcements SET status = 'DISPLAYED' WHERE status = 'ACTIVE'")
         cursor.execute('''
             INSERT INTO announcements (heading, time_label, details, duration_seconds, priority, sound_enabled, audio_file, loop_audio, until_song_complete, status, scheduled_timestamp, displayed_timestamp, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -705,6 +803,7 @@ def admin_create_announcement():
 
     action_text = 'DISPLAY_NOW' if display_now else 'SCHEDULED'
     log_audit(f'ANNOUNCEMENT_{action_text}', DEFAULT_ADMIN_USER, f'[{heading}] Music: {audio_file or "None"}, Priority: {priority}, Duration: {duration_seconds}s', request.remote_addr or '')
+    notify_sse_clients()
     return jsonify({'success': True, 'id': ann_id, 'event': calculate_event_state()}), 200
 
 @app.route('/api/admin/announcements/trigger', methods=['POST'])
@@ -723,6 +822,7 @@ def admin_trigger_announcement():
         conn.commit()
 
     log_audit('ANNOUNCEMENT_TRIGGER_NOW', DEFAULT_ADMIN_USER, f'Triggered announcement ID {ann_id}', request.remote_addr or '')
+    notify_sse_clients()
     return jsonify({'success': True, 'event': calculate_event_state()}), 200
 
 @app.route('/api/admin/announcements/delete', methods=['POST'])
@@ -736,7 +836,9 @@ def admin_delete_announcement():
         conn.commit()
 
     log_audit('ANNOUNCEMENT_DELETE', DEFAULT_ADMIN_USER, f'Deleted announcement ID {ann_id}', request.remote_addr or '')
+    notify_sse_clients()
     return jsonify({'success': True, 'event': calculate_event_state()}), 200
+
 
 @app.route('/Music/<path:filename>')
 def serve_music(filename):

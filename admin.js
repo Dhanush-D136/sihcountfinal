@@ -429,29 +429,96 @@
     `).join('');
   }
 
+  // Authoritative State Trackers for Admin Dashboard
+  let serverEventState = null;
+  let serverClockOffset = 0;
+  let lastAdminDisplayedTotalSeconds = null;
+  let adminEvtSource = null;
+
+  // Authoritative High-Precision Admin Timestamp Timer Loop
+  function tickAdminTimerLoop() {
+    if (!serverEventState) return;
+
+    const status = serverEventState.status;
+    const nowClientSeconds = Date.now() / 1000;
+    const nowServerSeconds = nowClientSeconds + serverClockOffset;
+
+    let remainingSecondsFloat = 0;
+    const duration = serverEventState.duration_seconds || 86400;
+    const targetTs = serverEventState.target_timestamp || serverEventState.end_timestamp;
+
+    if (status === 'RUNNING' && targetTs) {
+      remainingSecondsFloat = Math.max(0, targetTs - nowServerSeconds);
+    } else if (status === 'PAUSED') {
+      remainingSecondsFloat = serverEventState.remaining_seconds || 0;
+    } else if (status === 'COMPLETED') {
+      remainingSecondsFloat = 0;
+    } else { // NOT_STARTED
+      remainingSecondsFloat = duration;
+    }
+
+    const remainingSecondsInt = Math.ceil(remainingSecondsFloat);
+
+    if (remainingSecondsInt !== lastAdminDisplayedTotalSeconds) {
+      lastAdminDisplayedTotalSeconds = remainingSecondsInt;
+
+      const hours = Math.floor(remainingSecondsInt / 3600);
+      const minutes = Math.floor((remainingSecondsInt % 3600) / 60);
+      const seconds = remainingSecondsInt % 60;
+
+      adminDigitHours.textContent = pad2(hours);
+      adminDigitMinutes.textContent = pad2(minutes);
+      adminDigitSeconds.textContent = pad2(seconds);
+    }
+
+    if (status === 'RUNNING' || status === 'PAUSED' || status === 'COMPLETED') {
+      const elapsedSeconds = Math.max(0, duration - remainingSecondsFloat);
+      const progressPercent = Math.min(100, Math.max(0, (elapsedSeconds / duration) * 100));
+      adminProgressFill.style.width = `${progressPercent.toFixed(1)}%`;
+      adminProgressPercent.textContent = `${progressPercent.toFixed(1)}%`;
+    }
+  }
+
+  function initAdminSSE() {
+    try {
+      if (adminEvtSource) {
+        adminEvtSource.close();
+        adminEvtSource = null;
+      }
+      adminEvtSource = new EventSource(`${API_BASE_URL}/api/events/stream`, { withCredentials: true });
+      adminEvtSource.onmessage = function (event) {
+        try {
+          const state = JSON.parse(event.data);
+          renderDashboard(state);
+        } catch (e) {}
+      };
+      adminEvtSource.onerror = function () {
+        if (adminEvtSource) {
+          adminEvtSource.close();
+          adminEvtSource = null;
+        }
+        setTimeout(initAdminSSE, 3000);
+      };
+    } catch (e) {
+      setTimeout(initAdminSSE, 3000);
+    }
+  }
+
   // 9. Render Dashboard Event State
   function renderDashboard(eventState) {
     if (!eventState) return;
+    serverEventState = eventState;
+
+    if (eventState.server_time) {
+      const clientNowSec = Date.now() / 1000;
+      serverClockOffset = eventState.server_time - clientNowSec;
+    }
 
     const status = eventState.status;
-    const remaining = eventState.remaining_seconds || 0;
-
-    const hours = Math.floor(remaining / 3600);
-    const minutes = Math.floor((remaining % 3600) / 60);
-    const seconds = remaining % 60;
-
-    adminDigitHours.textContent = pad2(hours);
-    adminDigitMinutes.textContent = pad2(minutes);
-    adminDigitSeconds.textContent = pad2(seconds);
-
-    // Progress Bar
-    const progress = eventState.progress_percent || 0;
-    adminProgressFill.style.width = `${progress}%`;
-    adminProgressPercent.textContent = `${progress.toFixed(1)}%`;
 
     // Metadata timestamps
     metaStartTime.textContent = formatTime(eventState.start_timestamp);
-    metaTargetTime.textContent = formatTime(eventState.target_timestamp);
+    metaTargetTime.textContent = formatTime(eventState.target_timestamp || eventState.end_timestamp);
     metaServerTime.textContent = formatTime(eventState.server_time);
 
     // Status Pill Class & Action Buttons State
@@ -471,6 +538,8 @@
       adminPauseBtn.disabled = true;
       adminResumeBtn.disabled = true;
     }
+
+    tickAdminTimerLoop();
   }
 
   // 10. Fetch Authoritative Admin Status & Audit Logs
@@ -495,6 +564,10 @@
 
   function showLoginView() {
     if (pollInterval) clearInterval(pollInterval);
+    if (adminEvtSource) {
+      adminEvtSource.close();
+      adminEvtSource = null;
+    }
     adminDashboardView.classList.add('hidden');
     adminLoginView.classList.remove('hidden');
   }
@@ -504,10 +577,15 @@
     adminLoginView.classList.add('hidden');
     adminDashboardView.classList.remove('hidden');
 
+    if (!adminEvtSource) {
+      initAdminSSE();
+    }
+
     if (!pollInterval) {
-      pollInterval = setInterval(fetchAdminStatus, 2000);
+      pollInterval = setInterval(fetchAdminStatus, 5000);
     }
   }
+
 
   // 11. Admin Login Request
   adminLoginForm.addEventListener('submit', async (e) => {
@@ -705,5 +783,6 @@
   document.addEventListener('DOMContentLoaded', () => {
     fetchAdminStatus();
     fetchMusicList();
+    setInterval(tickAdminTimerLoop, 50);
   });
 })();
