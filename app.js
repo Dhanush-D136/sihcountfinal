@@ -251,7 +251,16 @@
     const nowClientSeconds = Date.now() / 1000;
     const nowServerSeconds = nowClientSeconds + serverClockOffset;
     const elapsedSeconds = Math.max(0, nowServerSeconds - (ann.displayed_timestamp || nowServerSeconds));
-    const duration = ann.duration_seconds || 60;
+    
+    // Determine effective duration: for 'until_song_complete', retrieve preloaded audio duration if available
+    let duration = ann.duration_seconds || 60;
+    if (ann.until_song_complete && ann.audio_file && ann.audio_file !== 'none') {
+      const trackDuration = window.AudioEngine.getAudioDuration(ann.audio_file);
+      if (trackDuration > 0) {
+        duration = Math.ceil(trackDuration);
+      }
+    }
+
     const remainingSecondsFloat = Math.max(0, duration - elapsedSeconds);
     const remainingSecondsInt = Math.ceil(remainingSecondsFloat);
 
@@ -278,6 +287,7 @@
       annTimerText.innerHTML = `<i class="fa-solid fa-hourglass-half"></i> DISMISSING IN ${remainingSecondsInt}s`;
     }
 
+    // Show visual overlay immediately (<10ms)
     announcementOverlay.classList.remove('hidden');
 
     // Smooth fade out when 1 second remains
@@ -285,11 +295,16 @@
       window.AudioEngine.stopAnnouncementMusic(0.8);
     }
 
+    // Trigger Audio & Chime only once when a new announcement ID arrives
     if (lastAnnId !== ann.id) {
       lastAnnId = ann.id;
+
+      const tOverlay = performance.now();
+      console.log(`[PERF DIAGNOSTIC] OVERLAY START: ${tOverlay.toFixed(2)}ms`);
+      console.log(`[PERF DIAGNOSTIC] announcement_progress_start: 0.00ms`);
       
-      // Explicit Audio Check: Only play audio if audio_file is specified!
-      if (ann.sound_enabled && ann.audio_file) {
+      // Explicit Audio Check: Only play audio if audio_file is specified and sound_enabled is true
+      if (ann.sound_enabled && ann.audio_file && ann.audio_file !== '' && ann.audio_file !== 'none') {
         window.AudioEngine.playAnnouncementChime(ann.priority);
 
         const seekOffset = Math.max(0, elapsedSeconds);
@@ -306,6 +321,7 @@
         );
       } else {
         // NONE — NO SOUND selected: Ensure zero audio plays
+        console.log(`[PERF DIAGNOSTIC] None — No Sound selected. Visual announcement only.`);
         window.AudioEngine.stopAnnouncementMusic(0);
       }
     }
@@ -481,6 +497,9 @@
   function initApp() {
     window.AudioEngine.loadMuteState();
     updateSoundUI();
+
+    // Preload notification music immediately on boot
+    window.AudioEngine.preloadAllMusic();
 
     fetchServerState();
     initSSE();

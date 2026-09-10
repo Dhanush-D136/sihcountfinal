@@ -218,7 +218,9 @@
 
   // 4. Admin Local Audio Preview (Plays ONLY on admin device)
   function stopAudioPreview() {
-    if (previewAudioInstance) {
+    if (window.AudioEngine && window.AudioEngine.stopPreview) {
+      window.AudioEngine.stopPreview();
+    } else if (previewAudioInstance) {
       try {
         previewAudioInstance.pause();
         previewAudioInstance.currentTime = 0;
@@ -232,32 +234,38 @@
     stopAudioPreview();
     if (!filename) return;
 
-    const audioUrl = (API_BASE_URL ? API_BASE_URL : '') + `/Music/${encodeURIComponent(filename)}`;
-    previewAudioInstance = new Audio(audioUrl);
-    previewAudioInstance.loop = annLoopMusicCheckbox.checked;
-
-    previewAudioInstance.play().then(() => {
+    if (window.AudioEngine && window.AudioEngine.playPreview) {
+      window.AudioEngine.playPreview(filename, annLoopMusicCheckbox.checked, () => {
+        stopAudioPreview();
+      });
       previewAudioIcon.className = 'fa-solid fa-stop';
       previewAudioBtnText.textContent = 'STOP PREVIEW';
       previewAudioBtn.classList.add('playing');
-    }).catch(err => {
-      console.warn('Audio preview failed (autoplay restricted or file missing):', err);
-      alert('Unable to play audio preview. Please check sound settings or select another file.');
-    });
+    } else {
+      const audioUrl = (API_BASE_URL ? API_BASE_URL : '') + `/Music/${encodeURIComponent(filename)}`;
+      previewAudioInstance = new Audio(audioUrl);
+      previewAudioInstance.loop = annLoopMusicCheckbox.checked;
 
-    previewAudioInstance.onended = () => {
-      stopAudioPreview();
-    };
+      previewAudioInstance.play().then(() => {
+        previewAudioIcon.className = 'fa-solid fa-stop';
+        previewAudioBtnText.textContent = 'STOP PREVIEW';
+        previewAudioBtn.classList.add('playing');
+      }).catch(err => {
+        console.warn('Audio preview failed:', err);
+      });
+
+      previewAudioInstance.onended = () => {
+        stopAudioPreview();
+      };
+    }
   }
 
   previewAudioBtn.addEventListener('click', () => {
-    if (previewAudioInstance) {
+    if (previewAudioBtn.classList.contains('playing') || previewAudioInstance) {
       stopAudioPreview();
     } else {
       const selectedFile = annFormMusic.value;
-      if (!selectedFile) {
-        return; // None - No Sound, button is disabled
-      }
+      if (!selectedFile) return;
       playAudioPreview(selectedFile);
     }
   });
@@ -282,7 +290,15 @@
 
   function getCalculatedDuration() {
     if (currentSelectedDurationType === 'until_complete') {
-      return { duration_seconds: 180, until_song_complete: true };
+      const selectedFile = annFormMusic ? annFormMusic.value : null;
+      let dur = 180;
+      if (selectedFile && window.AudioEngine) {
+        const trackDur = window.AudioEngine.getAudioDuration(selectedFile);
+        if (trackDur > 0) {
+          dur = Math.ceil(trackDur);
+        }
+      }
+      return { duration_seconds: dur, until_song_complete: true };
     }
     if (currentSelectedDurationType === 'custom') {
       const h = parseInt(customDurHours.value || 0, 10);

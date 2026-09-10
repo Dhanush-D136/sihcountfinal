@@ -267,49 +267,174 @@
     });
   }
 
+  // ==========================================================================
+  // CENTRAL AUDIO MANIFEST & PRELOADED AUDIO REGISTRY
+  // Pre-created HTMLAudioElement objects for zero-latency instant playback
+  // ==========================================================================
+  const audioRegistry = {}; // filename -> HTMLAudioElement
+  const NOTIFICATION_AUDIO_MANIFEST = {};
   let currentAnnouncementAudio = null;
+  let activeAudioFilename = null;
   let fadeInterval = null;
+  let previewAudioInstance = null;
+
+  function preloadAudioFile(filename) {
+    if (!filename || filename === '' || filename === 'none') return null;
+    if (audioRegistry[filename]) return audioRegistry[filename];
+
+    try {
+      const encodedFilename = encodeURIComponent(filename);
+      const audioUrl = `/Music/${encodedFilename}`;
+      NOTIFICATION_AUDIO_MANIFEST[filename] = audioUrl;
+
+      const audio = new Audio(audioUrl);
+      audio.preload = 'auto';
+      audio.load(); // Immediately instruct browser to download & decode audio header/bytes
+
+      audioRegistry[filename] = audio;
+      console.log(`[AUDIO ENGINE] Cached & preloaded track: ${filename}`);
+      return audio;
+    } catch (e) {
+      console.warn(`[AUDIO ENGINE] Failed to preload audio track ${filename}:`, e);
+      return null;
+    }
+  }
+
+  async function preloadAllMusic(musicList) {
+    const tStart = performance.now();
+    try {
+      let filesToPreload = musicList;
+      if (!filesToPreload || filesToPreload.length === 0) {
+        const DEFAULT_RENDER_URL = 'https://sihcountdownveltech.onrender.com';
+        const API_BASE_URL = window.API_BASE_URL ||
+          (window.location.hostname.includes('vercel.app') ? DEFAULT_RENDER_URL : '');
+        const res = await fetch(`${API_BASE_URL}/api/music/list`);
+        if (res.ok) {
+          const data = await res.json();
+          filesToPreload = data.music || [];
+        }
+      }
+
+      if (Array.isArray(filesToPreload)) {
+        filesToPreload.forEach(item => {
+          const filename = typeof item === 'object' ? item.filename : item;
+          if (filename && filename !== '' && filename !== 'none') {
+            preloadAudioFile(filename);
+          }
+        });
+      }
+      console.log(`[AUDIO ENGINE] Preload complete in ${(performance.now() - tStart).toFixed(2)}ms. Total cached tracks: ${Object.keys(audioRegistry).length}`);
+    } catch (e) {
+      console.warn('[AUDIO ENGINE] Error during background music preloading:', e);
+    }
+  }
+
+  function getAudioDuration(filename) {
+    if (!filename) return 0;
+    const audio = audioRegistry[filename];
+    if (audio && audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+      return audio.duration;
+    }
+    return 0;
+  }
 
   function playAnnouncementMusic(filename, loop = false, seekSeconds = 0, onEndedCallback = null) {
-    if (isMuted) return;
-    if (!filename) return;
+    const tStart = performance.now();
+    console.log(`[PERF DIAGNOSTIC] announcement_received: 0.00ms`);
 
-    const encodedFilename = encodeURIComponent(filename);
-    if (currentAnnouncementAudio && currentAnnouncementAudio.src.includes(encodedFilename)) {
-      if (currentAnnouncementAudio.paused) {
-        currentAnnouncementAudio.play().catch(() => {});
-      }
+    if (isMuted) {
+      console.log(`[PERF DIAGNOSTIC] audio_play_attempt: skipped (Sound OFF)`);
       return;
     }
 
-    stopAnnouncementMusic(0);
-
-    const audioUrl = `/Music/${encodedFilename}`;
-    currentAnnouncementAudio = new Audio(audioUrl);
-    currentAnnouncementAudio.loop = !!loop;
-    currentAnnouncementAudio.volume = 1.0;
-
-    currentAnnouncementAudio.addEventListener('loadedmetadata', () => {
-      if (seekSeconds > 0 && seekSeconds < currentAnnouncementAudio.duration) {
-        currentAnnouncementAudio.currentTime = seekSeconds;
-      }
-    });
-
-    if (onEndedCallback) {
-      currentAnnouncementAudio.onended = onEndedCallback;
+    if (!filename || filename === '' || filename === 'none') {
+      console.log(`[PERF DIAGNOSTIC] audio_play_attempt: skipped (None - No Sound selected)`);
+      stopAnnouncementMusic(0);
+      return;
     }
 
-    currentAnnouncementAudio.play().catch(err => {
-      console.warn('Public announcement music playback blocked by browser policy:', err);
-    });
+    // Stop current track if switching tracks
+    if (currentAnnouncementAudio && activeAudioFilename !== filename) {
+      stopAnnouncementMusic(0);
+    }
+
+    let audio = audioRegistry[filename];
+    if (!audio) {
+      console.log(`[AUDIO ENGINE] Cache miss for ${filename}, preloading dynamically...`);
+      audio = preloadAudioFile(filename);
+    }
+
+    if (!audio) {
+      console.warn(`[AUDIO ENGINE] Audio object unavailable for ${filename}`);
+      return;
+    }
+
+    console.log(`[PERF DIAGNOSTIC] audio_object_ready: ${(performance.now() - tStart).toFixed(2)}ms (pre-cached)`);
+
+    currentAnnouncementAudio = audio;
+    activeAudioFilename = filename;
+
+    audio.loop = !!loop;
+    audio.volume = 1.0;
+
+    // Apply synchronized seek offset derived from server timestamp
+    if (seekSeconds > 0) {
+      try {
+        if (audio.duration && seekSeconds < audio.duration) {
+          audio.currentTime = seekSeconds;
+        } else if (!audio.duration) {
+          audio.currentTime = seekSeconds;
+        }
+      } catch (e) {
+        console.warn('[AUDIO ENGINE] Seek error:', e);
+      }
+    } else {
+      try {
+        audio.currentTime = 0;
+      } catch (e) {}
+    }
+
+    if (onEndedCallback) {
+      audio.onended = onEndedCallback;
+    }
+
+    console.log(`[PERF DIAGNOSTIC] audio_play_attempt: ${(performance.now() - tStart).toFixed(2)}ms`);
+
+    // Call play() immediately without awaiting network load or canplaythrough
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.then(() => {
+        console.log(`[PERF DIAGNOSTIC] audio_play_started: ${(performance.now() - tStart).toFixed(2)}ms`);
+      }).catch(err => {
+        console.warn('[AUDIO ENGINE] Announcement music playback blocked by browser policy:', err);
+        // Fallback user interaction resume listener
+        const resumeOnInteraction = () => {
+          if (currentAnnouncementAudio === audio && audio.paused) {
+            audio.play().catch(() => {});
+          }
+          window.removeEventListener('pointerdown', resumeOnInteraction);
+          window.removeEventListener('keydown', resumeOnInteraction);
+        };
+        window.addEventListener('pointerdown', resumeOnInteraction, { once: true });
+        window.addEventListener('keydown', resumeOnInteraction, { once: true });
+      });
+    }
   }
 
   function stopAnnouncementMusic(fadeSeconds = 0.8) {
-    if (fadeInterval) clearInterval(fadeInterval);
-    if (!currentAnnouncementAudio) return;
+    if (fadeInterval) {
+      clearInterval(fadeInterval);
+      fadeInterval = null;
+    }
+
+    if (!currentAnnouncementAudio) {
+      activeAudioFilename = null;
+      return;
+    }
 
     const audioToStop = currentAnnouncementAudio;
     currentAnnouncementAudio = null;
+    activeAudioFilename = null;
 
     if (fadeSeconds > 0 && !audioToStop.paused && audioToStop.volume > 0.05) {
       const fadeSteps = 16;
@@ -322,22 +447,66 @@
             audioToStop.volume = Math.max(0, audioToStop.volume - volStep);
           } else {
             clearInterval(fadeInterval);
+            fadeInterval = null;
             audioToStop.pause();
             audioToStop.currentTime = 0;
+            audioToStop.volume = 1.0;
           }
         } catch (e) {
           clearInterval(fadeInterval);
+          fadeInterval = null;
         }
       }, intervalMs);
     } else {
       try {
         audioToStop.pause();
         audioToStop.currentTime = 0;
+        audioToStop.volume = 1.0;
       } catch (e) {}
     }
   }
 
-  document.addEventListener('DOMContentLoaded', preloadLaunchAudio);
+  // Local Admin Audio Preview (Plays ONLY on admin device)
+  function playPreview(filename, loop = false, onEndedCallback = null) {
+    stopPreview();
+    if (!filename || filename === '' || filename === 'none') return;
+
+    let audio = audioRegistry[filename];
+    if (!audio) {
+      audio = preloadAudioFile(filename);
+    }
+
+    if (!audio) return;
+
+    previewAudioInstance = audio;
+    audio.loop = !!loop;
+    audio.volume = 1.0;
+    audio.currentTime = 0;
+
+    if (onEndedCallback) {
+      audio.onended = onEndedCallback;
+    }
+
+    audio.play().catch(err => {
+      console.warn('[AUDIO ENGINE] Preview audio playback failed:', err);
+    });
+  }
+
+  function stopPreview() {
+    if (previewAudioInstance) {
+      try {
+        previewAudioInstance.pause();
+        previewAudioInstance.currentTime = 0;
+      } catch (e) {}
+      previewAudioInstance = null;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    preloadLaunchAudio();
+    // Trigger background preloading of all notification music on page load
+    preloadAllMusic();
+  });
 
   window.AudioEngine = {
     setMuted,
@@ -349,6 +518,12 @@
     stopAnnouncementMusic,
     playTickSound,
     playVictoryFanfare,
+    preloadAllMusic,
+    preloadAudioFile,
+    getAudioDuration,
+    playPreview,
+    stopPreview,
     isMuted: () => isMuted
   };
 })();
+

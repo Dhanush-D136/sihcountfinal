@@ -741,7 +741,9 @@ def admin_delete_announcement():
 @app.route('/Music/<path:filename>')
 def serve_music(filename):
     music_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'Music'))
-    return send_from_directory(music_dir, filename)
+    res = make_response(send_from_directory(music_dir, filename))
+    res.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return res
 
 # Static file routes
 @app.route('/')
